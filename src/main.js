@@ -1,69 +1,71 @@
-// src/main.js do seu projeto EDITOR (mjmockup)
+// src/main.js do seu projeto EDITOR (mjmockups)
 
-import { createApp } from 'vue'
-import App from './App.vue'
-import { jwtDecode } from 'jwt-decode'
+import { createApp } from 'vue';
+import { createPinia } from 'pinia'; // Importa a função para criar o Pinia
+import App from './App.vue';
+import router from './router'; // Importa suas configurações de rota
+import { jwtDecode } from 'jwt-decode';
 
-// --- ETAPA 1: IMPORTAR OS PLUGINS ---
-import { createPinia } from 'pinia'
-import { createVuetify } from 'vuetify'
-import 'vuetify/styles' // Importa os estilos do Vuetify
-import '@mdi/font/css/materialdesignicons.css' // Importa os ícones
+// Seus estilos globais
+import './assets/main.css';
 
 // Função para mostrar erro (sem alterações)
 const renderAccessDenied = (message) => {
-  const appDiv = document.querySelector('#app')
+  const appDiv = document.querySelector('#app');
   if (appDiv) {
     appDiv.innerHTML = `
       <div style="font-family: sans-serif; text-align: center; padding: 40px; color: #ccc;">
         <h1>Acesso Negado</h1>
         <p>${message}</p>
       </div>
-    `
+    `;
   }
-}
+};
 
 // Função principal
 const initializeApp = () => {
-  // Lógica do Token (sem alterações, já está funcionando)
-  const urlParams = new URLSearchParams(window.location.search)
-  const token = urlParams.get('token')
+  // Lógica do Token (que já está funcionando perfeitamente)
+  const urlParams = new URLSearchParams(window.location.search);
+  // Pega o token da sessionStorage se o usuário recarregar a página
+  const token = urlParams.get('token') || sessionStorage.getItem('editor-token');
 
   if (!token) {
-    return renderAccessDenied('Link de acesso inválido ou ausente.')
+    return renderAccessDenied('Link de acesso inválido ou ausente. Este recurso só pode ser acessado através da plataforma principal.');
   }
 
   try {
-    const decoded = jwtDecode(token)
-    const expirationTime = decoded.exp * 1000
+    const decoded = jwtDecode(token);
+    const expirationTime = decoded.exp * 1000;
 
     if (decoded.role !== 'vendedor') {
-      return renderAccessDenied('Você não tem permissão para acessar este recurso.')
+      return renderAccessDenied('Você não tem permissão para acessar este recurso.');
     }
     if (Date.now() >= expirationTime) {
-      return renderAccessDenied('Seu link de acesso expirou.')
+      sessionStorage.removeItem('editor-token'); // Limpa token expirado
+      return renderAccessDenied('Seu link de acesso expirou. Por favor, gere um novo na plataforma principal.');
     }
 
-    // --- ETAPA 2: INICIALIZAR E USAR OS PLUGINS ---
-    console.log('Acesso autorizado para o vendedor:', decoded.sub)
+    // Se o token for válido, guarda na sessionStorage para o caso de refresh
+    sessionStorage.setItem('editor-token', token);
 
-    const app = createApp(App)
-    const pinia = createPinia()
-    const vuetify = createVuetify({
-      theme: {
-        defaultTheme: 'dark', // Assumindo que seu editor também usa tema escuro
-      },
-    })
+    // --- A PARTE MAIS IMPORTANTE ---
+    // Se tudo estiver OK, inicialize o Vue e conecte os plugins
+    console.log('Acesso autorizado para o vendedor:', decoded.sub);
 
-    app.use(pinia) // Registra o Pinia
-    app.use(vuetify) // Registra o Vuetify
+    const app = createApp(App);
+    const pinia = createPinia();
 
-    app.mount('#app') // Monta o app DEPOIS de registrar os plugins
+    app.use(pinia);   // Registra o Pinia para que as stores funcionem
+    app.use(router);  // Registra o Vue Router para que as rotas funcionem
+
+    app.mount('#app'); // Monta o app DEPOIS de tudo estar pronto
+
   } catch (error) {
-    console.error('Erro na validação do token:', error)
-    return renderAccessDenied('Ocorreu um erro ao validar seu link de acesso.')
+    console.error("Erro na validação do token:", error);
+    sessionStorage.removeItem('editor-token');
+    return renderAccessDenied('Ocorreu um erro ao validar seu link de acesso.');
   }
-}
+};
 
 // Inicia o processo
-initializeApp()
+initializeApp();
