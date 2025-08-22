@@ -1,36 +1,15 @@
 <script setup>
 import { useAuthStore } from '@/stores/authStore'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { useSubscriptionStore } from '@/stores/subscriptionStore'
 import { useRouter } from 'vue-router'
 import { computed } from 'vue'
 
 const authStore = useAuthStore()
 const canvasStore = useCanvasStore()
-const subscriptionStore = useSubscriptionStore()
 const router = useRouter()
 
 const viewModeText = computed(() => {
   return canvasStore.workspace.viewMode === 'edit' ? 'Ver Mockup' : 'Voltar a Editar'
-})
-
-const planIcon = computed(() => {
-  const plan = authStore.profile?.subscription_plan || 'free'
-  switch (plan) {
-    case 'basic':
-      return 'shield-check'
-    case 'pro':
-      return 'gem'
-    case 'enterprise':
-      return 'crown'
-    default:
-      return 'shield'
-  }
-})
-
-const planTooltip = computed(() => {
-  const plan = authStore.profile?.subscription_plan || 'free'
-  return `Plano ${plan.charAt(0).toUpperCase() + plan.slice(1)}`
 })
 
 function navigateToAccount() {
@@ -86,68 +65,6 @@ async function logout() {
       </button>
 
       <div class="user-actions">
-        <button class="icon-btn" :title="planTooltip" @click="subscriptionStore.openModal()">
-          <svg
-            v-if="planIcon === 'shield'"
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-          </svg>
-          <svg
-            v-if="planIcon === 'shield-check'"
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-            <path d="m9 12 2 2 4-4"></path>
-          </svg>
-          <svg
-            v-if="planIcon === 'gem'"
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M6 3h12l4 6-10 13L2 9Z" />
-            <path d="M12 22 6 9l-4-6h16l-4 6" />
-            <path d="M2 9h20" />
-          </svg>
-          <svg
-            v-if="planIcon === 'crown'"
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" />
-          </svg>
-        </button>
-
         <button class="icon-btn" title="Minha Conta" @click="navigateToAccount">
           <img
             v-if="authStore.profile && authStore.profile.avatar_url"

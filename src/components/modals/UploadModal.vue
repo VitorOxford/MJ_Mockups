@@ -1,6 +1,7 @@
 <script setup>
 import { useCanvasStore } from '@/stores/canvasStore'
 import { ref } from 'vue'
+import exifr from 'exifr'
 
 const props = defineProps({
   isVisible: Boolean,
@@ -11,17 +12,28 @@ const store = useCanvasStore()
 const dragOverEstampa = ref(false)
 const dragOverMockup = ref(false)
 
-function handleFile(file, type) {
+async function handleFile(file, type) {
   if (!file || !file.type.startsWith('image/')) {
     alert('Por favor, selecione um ficheiro de imagem.')
     return
   }
 
-  // --- CORREÇÃO DE PERFORMANCE ---
-  // Passa o objeto File diretamente para o store, que usará URL.createObjectURL
-  const imageUrl = URL.createObjectURL(file)
-  store.addLocalLayer(file, type, imageUrl)
-  emit('close')
+  try {
+    // 1. Tenta ler os metadados da imagem
+    const exif = await exifr.parse(file)
+    const dpi = exif?.XResolution || 96 // Usa o DPI do arquivo ou assume 96 como padrão
+
+    // 2. Passa o objeto File diretamente para o store, que usará URL.createObjectURL
+    const imageUrl = URL.createObjectURL(file)
+    store.addLocalLayer(file, type, imageUrl, { dpi }) // <-- Passa o DPI lido
+    emit('close')
+  } catch (error) {
+    console.error('Não foi possível ler os metadados da imagem, usando DPI padrão.', error)
+    // Se falhar a leitura, continua o processo com o DPI padrão
+    const imageUrl = URL.createObjectURL(file)
+    store.addLocalLayer(file, type, imageUrl, { dpi: 96 })
+    emit('close')
+  }
 }
 
 function onDrop(e, type) {

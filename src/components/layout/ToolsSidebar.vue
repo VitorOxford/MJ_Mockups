@@ -11,9 +11,11 @@ const props = defineProps({
 })
 
 const store = useCanvasStore()
-const emit = defineEmits(['show-controls'])
 const isUploadModalVisible = ref(false)
 const toolsGridRef = ref(null)
+
+// ** NOVO: Expõe a referência do grid para o componente pai **
+defineExpose({ toolsGridRef })
 
 const editTools = [
   {
@@ -67,11 +69,11 @@ const previewTools = computed(() => [
   },
   { type: 'divider' },
   {
-    id: 'zoom-preview', // NOVO: Ferramenta de Zoom do Preview
+    id: 'zoom-preview',
     name: 'Zoom do Preview',
     icon: 'M15 4h5v5M9 20H4v-5M20 9l-7 7-7-7',
     requiresLayer: false,
-    previewOnly: false, // Sempre ativa no modo preview
+    previewOnly: false,
   },
   { type: 'divider' },
   {
@@ -96,7 +98,7 @@ const previewTools = computed(() => [
     previewOnly: true,
   },
   {
-    id: 'lasso-select', // NOVO: Ferramenta Laço no Preview
+    id: 'lasso-select',
     name: 'Laço (L)',
     icon: 'M13.25 2.19a3.78 3.78 0 0 0-4.5 0l-6 4A3.78 3.78 0 0 0 1 9.47v5.06a3.78 3.78 0 0 0 1.75 3.28l6 4a3.78 3.78 0 0 0 4.5 0l6-4a3.78 3.78 0 0 0 1.75-3.28V9.47a3.78 3.78 0 0 0-1.75-3.28l-6-4Z',
     requiresLayer: true,
@@ -135,19 +137,6 @@ function handleToolClick(tool) {
     store.setActiveTool(tool.id)
   }
 }
-
-watch(
-  () => store.activeTool,
-  (activeToolId) => {
-    const toolButton = toolsGridRef.value?.querySelector(`[data-tool-id="${activeToolId}"]`)
-    if (toolButton && ['move', 'zoom', 'rotate', 'zoom-preview'].includes(activeToolId)) {
-      const rect = toolButton.getBoundingClientRect()
-      emit('show-controls', { top: rect.top, left: rect.right + 12, visible: true })
-    } else {
-      emit('show-controls', { visible: false })
-    }
-  },
-)
 </script>
 
 <template>
@@ -161,7 +150,9 @@ watch(
           :class="{
             active: store.activeTool === tool.id,
             disabled:
-              (tool.requiresLayer && store.layers.length === 0) ||
+              (tool.requiresLayer &&
+                !store.selectedLayer &&
+                !(store.workspace.previewIsInteractive && tool.id === 'move')) ||
               (tool.previewOnly && !store.workspace.previewIsInteractive),
           }"
           @click="handleToolClick(tool)"
@@ -188,6 +179,7 @@ watch(
 </template>
 
 <style scoped>
+/* Estilos permanecem os mesmos */
 .tools-sidebar {
   width: var(--sidebar-width);
   background-color: var(--c-surface);
@@ -225,13 +217,11 @@ watch(
   background-color: var(--c-primary);
   color: var(--c-white);
 }
-
 .tool-button.disabled {
   opacity: 0.4;
   cursor: not-allowed;
   pointer-events: none;
 }
-
 .tool-button:hover::after {
   content: attr(data-tooltip);
   position: absolute;

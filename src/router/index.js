@@ -2,8 +2,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import WorkspaceView from '@/views/WorkspaceView.vue'
 import AuthView from '@/views/AuthView.vue'
-import AccountView from '@/views/AccountView.vue' // Importa a nova view
-import { supabase } from '@/supabase'
+import AccountView from '@/views/AccountView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -14,7 +13,6 @@ const router = createRouter({
       component: WorkspaceView,
       meta: { requiresAuth: true },
     },
-    // NOVA ROTA
     {
       path: '/account',
       name: 'account',
@@ -29,18 +27,32 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach(async (to, from, next) => {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+// Lógica de Controle de Acesso baseada em Token JWT da URL
+// Conforme a arquitetura definida.
+router.beforeEach((to, from, next) => {
+  const token = to.query.token || sessionStorage.getItem('editor-token')
 
-  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
-
-  if (requiresAuth && !session) {
-    next({ name: 'auth' })
-  } else if (!requiresAuth && session) {
+  // Verifica se a rota requer autenticação
+  if (to.matched.some((record) => record.meta.requiresAuth)) {
+    // Se não houver token, o acesso é negado.
+    if (!token) {
+      next({ name: 'auth' })
+    } else {
+      // Se houver um token, armazena na sessionStorage para permitir recarregar a página
+      // e o remove da URL para não ficar visível.
+      sessionStorage.setItem('editor-token', token)
+      next()
+      // Remove o token da URL após o roteamento inicial
+      if (to.query.token) {
+        router.replace({ ...to, query: { ...to.query, token: undefined } })
+      }
+    }
+  } else if (to.name === 'auth' && token) {
+    // Se o usuário tem um token e tenta acessar a página de 'auth',
+    // redireciona para o workspace.
     next({ name: 'workspace' })
   } else {
+    // Para rotas que não requerem autenticação (como a própria 'auth').
     next()
   }
 })

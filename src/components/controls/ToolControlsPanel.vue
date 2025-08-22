@@ -27,12 +27,21 @@ const scaleInPercent = computed({
   },
 })
 
-// CORREÇÃO: Controle para o Zoom do Preview agora usa o `workspace`
 const previewZoomLevel = computed({
   get: () => store.workspace.previewZoom * 100,
   set: (val) => {
     store.setPreviewZoom(val / 100)
   },
+})
+
+// ** NOVO: Condição de visibilidade para o Joystick **
+const showJoystick = computed(() => {
+  return (
+    store.activeTool === 'move' &&
+    store.selectedLayer &&
+    store.workspace.viewMode === 'preview' &&
+    store.workspace.previewIsInteractive
+  )
 })
 
 function handleJoystickMove(event) {
@@ -51,8 +60,8 @@ const panelStyle = computed(() => ({
 
 <template>
   <div class="tool-controls-panel" v-if="props.position.visible" :style="panelStyle">
-    <div v-if="store.activeTool === 'move' && store.selectedLayer" class="control-group">
-      <label>Mover Camada</label>
+    <div v-if="showJoystick" class="control-group">
+      <label>Mover Estampa</label>
       <Joystick @move="handleJoystickMove" />
     </div>
 
@@ -75,7 +84,7 @@ const panelStyle = computed(() => ({
 
 <style scoped>
 .tool-controls-panel {
-  position: absolute;
+  position: fixed; /* Mude para 'fixed' para se posicionar relativo à janela */
   background-color: rgba(255, 255, 255, 0.8);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);

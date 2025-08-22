@@ -66,7 +66,6 @@ async function handleSubmit() {
     const p_scale = pattern ? (pattern.scale * 100).toFixed(0) : 'N/A'
     const p_rotation = pattern ? ((pattern.rotation * 180) / Math.PI).toFixed(1) : 'N/A'
 
-    // --- CORREÇÃO AQUI ---
     const techInfo = `
 # Informações Técnicas - MockupCreator Pro
 
@@ -81,10 +80,10 @@ async function handleSubmit() {
 
 Aprovado por: (Cliente)
 Data: ${new Date().toLocaleDateString('pt-BR')}
+Gestor do Pedido: (Nome do Vendedor)
 `
     zip.file('Informacoes_Tecnicas.txt', techInfo.trim())
 
-    // O resto da lógica permanece
     const previewBlob = await generatePreviewImageBlob()
     if (previewBlob) zip.file('Preview_Final.jpg', previewBlob)
 
@@ -106,31 +105,7 @@ Data: ${new Date().toLocaleDateString('pt-BR')}
     document.body.removeChild(link)
     URL.revokeObjectURL(link.href)
 
-    alert(
-      'Pacote de aprovação baixado! Por favor, anexe o ficheiro .zip que acabou de baixar na conversa do WhatsApp que irá abrir.',
-    )
-
-    // --- CORREÇÃO AQUI ---
-    const message = `
-Olá!
-
-Estou a finalizar um projeto no MockupCreator Pro e gostaria de o aprovar.
-
-*Detalhes do Projeto:*
-- *Mockup:* ${mockup?.name || 'N/A'}
-- *Dimensões do Mockup:* ${m_dims.width} x ${m_dims.height} cm
-- *Estampa:* ${pattern?.name || 'N/A'}
-- *Escala da Estampa:* ${p_scale}%
-
-*Aprovação:*
-- [x] Li e aprovo os termos (documento baixado).
-- [x] Pacote .zip com todos os ficheiros em anexo.
-
-Obrigado!
-`
-    const encodedMessage = encodeURIComponent(message.trim())
-    const whatsappUrl = `https://wa.me/5515991876055?text=${encodedMessage}`
-    window.open(whatsappUrl, '_blank')
+    alert('Pacote de aprovação baixado com sucesso!')
 
     store.showSignatureModal(false)
     store.showPreviewSidebar(false)
@@ -182,7 +157,7 @@ Obrigado!
         <span v-if="signedDocumentName" class="file-name">{{ signedDocumentName }}</span>
       </div>
       <button @click="handleSubmit" class="btn-submit" :disabled="!canSubmit">
-        {{ isProcessing ? 'A processar...' : '3. Finalizar e Enviar via WhatsApp' }}
+        {{ isProcessing ? 'A processar...' : '3. Baixar Pacote de Aprovação' }}
       </button>
     </div>
   </div>
@@ -287,7 +262,7 @@ Obrigado!
 .btn-submit {
   width: 100%;
   padding: var(--spacing-3);
-  background-color: #25d366;
+  background-color: var(--c-primary);
   color: white;
   border-radius: var(--radius-md);
   font-weight: var(--fw-bold);

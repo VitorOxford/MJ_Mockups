@@ -1,7 +1,7 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed, defineExpose } from 'vue'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { useImageAdjustmentsStore } from '@/stores/imageAdjustmentsStore' // Importa a nova store
+import { useImageAdjustmentsStore } from '@/stores/imageAdjustmentsStore'
 import HorizontalRuler from './HorizontalRuler.vue'
 import VerticalRuler from './VerticalRuler.vue'
 import SelectionOverlay from './SelectionOverlay.vue'
@@ -13,14 +13,10 @@ const wrapperRef = ref(null)
 const wrapperDimensions = ref({ width: 0, height: 0 })
 let ctx = null
 
-const offscreenCanvas = document.createElement('canvas')
-const offscreenCtx = offscreenCanvas.getContext('2d')
-
 let isPanning = false
 let isDraggingLayer = false
 let isTransformingLayer = false
 let isDrawingSelection = false
-let transformType = null
 let dragStartOffset = { x: 0, y: 0 }
 let lastPanPosition = { x: 0, y: 0 }
 
@@ -31,7 +27,7 @@ const gridStyle = computed(() => ({
 }))
 
 function renderCanvas() {
-  if (!ctx) return
+  if (!ctx || !canvasRef.value) return
   const canvas = canvasRef.value
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 
@@ -46,11 +42,6 @@ function renderEditMode(canvas) {
   ctx.save()
   ctx.translate(store.workspace.pan.x, store.workspace.pan.y)
   ctx.scale(store.workspace.zoom, store.workspace.zoom)
-
-  ctx.fillStyle = 'white'
-  ctx.fillRect(0, 0, store.workspace.document.width, store.workspace.document.height)
-  ctx.strokeStyle = '#ccc'
-  ctx.strokeRect(0, 0, store.workspace.document.width, store.workspace.document.height)
 
   for (const layer of store.layers) {
     if (!layer.visible || !layer.image) continue
@@ -94,47 +85,14 @@ function renderEditMode(canvas) {
   ctx.restore()
 }
 
+// ================================================================= //
+// NOVA RENDERIZAÇÃO DE PREVIEW COM TRANSFORMAÇÃO CORRETA            //
+// ================================================================= //
 function renderPreviewMode(canvas) {
   const mainMockup = store.mockupLayer
   if (!mainMockup || !mainMockup.image) return
 
-  const finalMockupWidth = mainMockup.metadata.originalWidth * mainMockup.scale
-  const finalMockupHeight = mainMockup.metadata.originalHeight * mainMockup.scale
-
-  offscreenCanvas.width = finalMockupWidth
-  offscreenCanvas.height = finalMockupHeight
-
-  offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height)
-
-  const patterns = store.layers.filter((l) => l.type === 'pattern' && l.visible && l.image)
-  const mockups = store.layers.filter((l) => l.type === 'mockup' && l.visible && l.image)
-
-  for (const layer of patterns) {
-    offscreenCtx.save()
-    const pattern = offscreenCtx.createPattern(layer.image, 'repeat')
-    const matrix = new DOMMatrix()
-      .translate(layer.x, layer.y)
-      .rotate(layer.rotation * (180 / Math.PI))
-      .scale(layer.scale)
-      .translate(-layer.x, -layer.y)
-      .translate(
-        layer.x - (layer.metadata.originalWidth / 2) * layer.scale,
-        layer.y - (layer.metadata.originalHeight / 2) * layer.scale,
-      )
-
-    pattern.setTransform(matrix)
-    offscreenCtx.fillStyle = pattern
-    offscreenCtx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height)
-    offscreenCtx.restore()
-  }
-
-  for (const layer of mockups) {
-    offscreenCtx.save()
-    offscreenCtx.globalAlpha = layer.opacity
-    offscreenCtx.drawImage(layer.image, 0, 0, finalMockupWidth, finalMockupHeight)
-    offscreenCtx.restore()
-  }
-
+  // 1. Prepara o fundo e calcula a geometria do mockup na tela
   ctx.save()
   ctx.fillStyle = getComputedStyle(document.documentElement)
     .getPropertyValue('--c-surface-dark')
@@ -142,20 +100,67 @@ function renderPreviewMode(canvas) {
   ctx.fillRect(0, 0, canvas.width, canvas.height)
 
   const padding = 0.9
-  const finalScale = Math.min(
-    (canvas.width * padding) / offscreenCanvas.width,
-    (canvas.height * padding) / offscreenCanvas.height,
-  )
+  const finalMockupWidth = mainMockup.metadata.originalWidth * mainMockup.scale
+  const finalMockupHeight = mainMockup.metadata.originalHeight * mainMockup.scale
 
+  if (finalMockupWidth === 0 || finalMockupHeight === 0) {
+    ctx.restore()
+    return
+  }
+
+  const finalScale = Math.min(
+    (canvas.width * padding) / finalMockupWidth,
+    (canvas.height * padding) / finalMockupHeight,
+  )
   store.updateWorkspace({ previewRenderScale: finalScale })
 
-  const finalWidth = offscreenCanvas.width * finalScale
-  const finalHeight = offscreenCanvas.height * finalScale
-  const dx = (canvas.width - finalWidth) / 2
-  const dy = (canvas.height - finalHeight) / 2
+  const finalWidthOnScreen = finalMockupWidth * finalScale
+  const finalHeightOnScreen = finalMockupHeight * finalScale
+  const dx = (canvas.width - finalWidthOnScreen) / 2
+  const dy = (canvas.height - finalHeightOnScreen) / 2
 
-  ctx.drawImage(offscreenCanvas, dx, dy, finalWidth, finalHeight)
-  ctx.restore()
+  // 2. Cria uma máscara de recorte na área do mockup
+  ctx.beginPath()
+  ctx.rect(dx, dy, finalWidthOnScreen, finalHeightOnScreen)
+  ctx.clip()
+
+  // 3. Renderiza as estampas usando createPattern com uma matriz de transformação precisa
+  const patterns = store.layers.filter((l) => l.type === 'pattern' && l.visible && l.image)
+  for (const layer of patterns) {
+    const imageToRender = store.workspace.isTransforming ? layer.proxyImage : layer.fullResImage
+    if (!imageToRender) continue
+
+    const pattern = ctx.createPattern(imageToRender, 'repeat')
+
+    const patternW = imageToRender.width
+    const patternH = imageToRender.height
+
+    // Constrói a matriz que combina a transformação do mockup na tela com a da estampa
+    const matrix = new DOMMatrix()
+      .translate(dx, dy) // Move para a posição do mockup na tela
+      .scale(finalScale) // Aplica a escala do mockup na tela
+      .translate(layer.x, layer.y) // Move para a posição central da estampa
+      .rotate((layer.rotation * 180) / Math.PI) // Gira a estampa
+      .scale(layer.scale) // Aplica a escala da estampa
+      .translate(-patternW / 2, -patternH / 2) // **ESSENCIAL**: Compensa a origem do padrão para o centro
+
+    pattern.setTransform(matrix)
+
+    // Preenche a área do mockup com a estampa transformada
+    ctx.fillStyle = pattern
+    ctx.fillRect(dx, dy, finalWidthOnScreen, finalHeightOnScreen)
+  }
+
+  // 4. Renderiza as camadas de mockup (overlays) por cima
+  const mockups = store.layers.filter((l) => l.type === 'mockup' && l.visible && l.image)
+  for (const layer of mockups) {
+    ctx.save()
+    ctx.globalAlpha = layer.opacity
+    ctx.drawImage(layer.image, dx, dy, finalWidthOnScreen, finalHeightOnScreen)
+    ctx.restore()
+  }
+
+  ctx.restore() // Limpa a máscara de recorte
 }
 
 function initCanvas() {
@@ -164,15 +169,22 @@ function initCanvas() {
   setupEventListeners()
   renderCanvas()
 }
+
 function resizeCanvas() {
   const wrapper = wrapperRef.value
-  if (!wrapper) return
-  const { width, height } = wrapper.getBoundingClientRect()
-  wrapperDimensions.value = { width, height }
-  canvasRef.value.width = width
-  canvasRef.value.height = height
-  renderCanvas()
+  if (!wrapper || !canvasRef.value) return
+
+  const width = wrapper.offsetWidth
+  const height = wrapper.offsetHeight
+
+  if (canvasRef.value.width !== width || canvasRef.value.height !== height) {
+    wrapperDimensions.value = { width, height }
+    canvasRef.value.width = width
+    canvasRef.value.height = height
+    requestAnimationFrame(renderCanvas)
+  }
 }
+
 function setupEventListeners() {
   const canvas = canvasRef.value
   window.addEventListener('resize', resizeCanvas)
@@ -183,6 +195,7 @@ function setupEventListeners() {
   canvas.addEventListener('wheel', handleWheel, { passive: false })
   canvas.addEventListener('contextmenu', handleContextMenu)
 }
+
 function cleanupEventListeners() {
   window.removeEventListener('resize', resizeCanvas)
   document.removeEventListener('mousemove', handleMouseMove)
@@ -195,22 +208,32 @@ function cleanupEventListeners() {
     canvas.removeEventListener('contextmenu', handleContextMenu)
   }
 }
-function onHandleMouseDown({ event, type, cursor }) {
+
+function onHandleMouseDown({ event, type }) {
   event.preventDefault()
   if (!store.selectedLayer) return
+
   isTransformingLayer = true
-  transformType = type
-  document.body.style.cursor = cursor
-  const mouse = { x: event.clientX, y: event.clientY }
+  document.body.style.cursor = window.getComputedStyle(event.target).cursor
+
+  const startMousePos = { x: event.clientX, y: event.clientY }
   const layer = store.selectedLayer
-  if (type === 'rotate') {
-    const layerScreenPos = getLayerScreenCenter(layer)
-    const startAngle = Math.atan2(mouse.y - layerScreenPos.y, mouse.x - layerScreenPos.x)
-    store.startLayerRotation(startAngle)
-  } else {
-    store.startLayerResize(mouse, layer.scale)
-  }
+  const layerCenter = getLayerScreenCenter(layer)
+  const dx = startMousePos.x - layerCenter.x
+  const dy = startMousePos.y - layerCenter.y
+
+  store.startLayerTransform({
+    layerId: layer.id,
+    type: type,
+    initialScale: layer.scale,
+    initialRotation: layer.rotation,
+    startMousePos: startMousePos,
+    layerCenter: layerCenter,
+    initialDistance: Math.sqrt(dx * dx + dy * dy),
+    initialAngle: Math.atan2(dy, dx),
+  })
 }
+
 function handleContextMenu(e) {
   e.preventDefault()
   const mouse = { x: e.offsetX, y: e.offsetY }
@@ -219,6 +242,7 @@ function handleContextMenu(e) {
     store.showContextMenu(true, { x: e.clientX, y: e.clientY }, clickedLayer.id)
   }
 }
+
 function handleMouseDown(e) {
   if (store.workspace.isContextMenuVisible) store.showContextMenu(false)
   if (e.button !== 0) return
@@ -237,6 +261,7 @@ function handleMouseDown(e) {
   if (store.activeTool === 'move' && clickedLayer) {
     if (store.selectedLayerId !== clickedLayer.id) store.selectLayer(clickedLayer.id)
     isDraggingLayer = true
+    store.workspace.isTransforming = true
     const layerCoords = screenToLayerCoords(mouse, clickedLayer)
     dragStartOffset = { x: layerCoords.x, y: layerCoords.y }
     return
@@ -245,16 +270,20 @@ function handleMouseDown(e) {
   lastPanPosition = { x: e.clientX, y: e.clientY }
   canvasRef.value.style.cursor = 'grabbing'
 }
+
 function handleMouseMove(e) {
+  if (isTransformingLayer) {
+    store.updateLayerTransform({ x: e.clientX, y: e.clientY })
+    return
+  }
+
   const mouse = { x: e.offsetX, y: e.offsetY }
   if (isDrawingSelection) {
     if (store.activeTool === 'rect-select') store.updateSelection(mouse)
     if (store.activeTool === 'lasso-select') store.updateLasso(mouse)
     return
   }
-  if (isTransformingLayer) {
-    return
-  }
+
   if (isDraggingLayer && store.selectedLayer) {
     const workspaceCoords = screenToWorkspaceCoords(mouse)
     const newX = workspaceCoords.x - dragStartOffset.x / store.selectedLayer.scale
@@ -269,7 +298,15 @@ function handleMouseMove(e) {
     lastPanPosition = { x: e.clientX, y: e.clientY }
   }
 }
+
 function handleMouseUp() {
+  if (isTransformingLayer) {
+    store.endLayerTransform()
+  }
+  if (store.workspace.isTransforming) {
+    store.workspace.isTransforming = false
+    requestAnimationFrame(renderCanvas)
+  }
   if (isDrawingSelection) {
     if (store.activeTool === 'rect-select') store.endSelection()
     if (store.activeTool === 'lasso-select') store.endLasso()
@@ -285,6 +322,7 @@ function handleMouseUp() {
       : 'grab'
   }
 }
+
 function handleWheel(e) {
   e.preventDefault()
   if (store.workspace.viewMode === 'preview') return
@@ -300,10 +338,12 @@ function handleWheel(e) {
   const newPanY = mouse.y - worldY * saneZoom
   store.updateWorkspace({ zoom: saneZoom, pan: { x: newPanX, y: newPanY } })
 }
+
 function screenToWorkspaceCoords(screenCoords) {
   const { pan, zoom } = store.workspace
   return { x: (screenCoords.x - pan.x) / zoom, y: (screenCoords.y - pan.y) / zoom }
 }
+
 function screenToLayerCoords(screenCoords, layer) {
   const workspaceCoords = screenToWorkspaceCoords(screenCoords)
   const cos = Math.cos(-layer.rotation)
@@ -312,10 +352,12 @@ function screenToLayerCoords(screenCoords, layer) {
   const dy = workspaceCoords.y - layer.y
   return { x: dx * cos - dy * sin, y: dx * sin + dy * cos }
 }
+
 function getLayerScreenCenter(layer) {
   const { pan, zoom } = store.workspace
   return { x: layer.x * zoom + pan.x, y: layer.y * zoom + pan.y }
 }
+
 function getLayerAtPosition(screenCoords) {
   for (let i = store.layers.length - 1; i >= 0; i--) {
     const layer = store.layers[i]
@@ -334,6 +376,7 @@ function getLayerAtPosition(screenCoords) {
   }
   return null
 }
+
 watch(
   () => store.activeTool,
   (newTool) => {
@@ -348,6 +391,7 @@ watch(
     }
   },
 )
+
 watch(
   () => [store.layers, store.workspace],
   () => {
@@ -367,6 +411,8 @@ watch(
 
 onMounted(initCanvas)
 onUnmounted(cleanupEventListeners)
+
+defineExpose({ resizeCanvas })
 </script>
 
 <template>
@@ -388,6 +434,7 @@ onUnmounted(cleanupEventListeners)
     </div>
   </div>
 </template>
+
 <style scoped>
 .canvas-layout {
   display: grid;

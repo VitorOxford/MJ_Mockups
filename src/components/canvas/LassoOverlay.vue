@@ -1,25 +1,100 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useCanvasStore } from '@/stores/canvasStore'
 
 const store = useCanvasStore()
+const lassoCanvasRef = ref(null)
+let ctx = null
+let animationFrameId = null
 
-const isVisible = computed(() => {
-  return store.activeTool === 'lasso-select' && store.workspace.lasso.active
+const renderLasso = () => {
+  if (!ctx) return
+  const canvas = lassoCanvasRef.value
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  if (store.workspace.lasso.points.length < 2) return
+
+  ctx.beginPath()
+  const firstPoint = store.workspace.lasso.points[0]
+  ctx.moveTo(firstPoint.x, firstPoint.y)
+  for (let i = 1; i < store.workspace.lasso.points.length; i++) {
+    const point = store.workspace.lasso.points[i]
+    ctx.lineTo(point.x, point.y)
+  }
+
+  // Se o laço estiver finalizado (mas ainda visível), fecha o caminho
+  if (!store.workspace.lasso.active) {
+    ctx.closePath()
+  }
+
+  ctx.fillStyle = 'rgba(13, 153, 255, 0.2)'
+  ctx.fill()
+  ctx.strokeStyle = 'var(--c-primary)'
+  ctx.lineWidth = 1.5
+  ctx.setLineDash([4, 2])
+  ctx.stroke()
+}
+
+const scheduleRender = () => {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId)
+  }
+  animationFrameId = requestAnimationFrame(renderLasso)
+}
+
+const resizeCanvas = () => {
+  const canvas = lassoCanvasRef.value
+  if (canvas && canvas.parentElement) {
+    canvas.width = canvas.parentElement.clientWidth
+    canvas.height = canvas.parentElement.clientHeight
+    scheduleRender()
+  }
+}
+
+onMounted(() => {
+  const canvas = lassoCanvasRef.value
+  if (canvas) {
+    ctx = canvas.getContext('2d')
+    resizeCanvas()
+    window.addEventListener('resize', resizeCanvas)
+  }
 })
 
-// Constrói a string de pontos para o polígono SVG
-const pointsString = computed(() => {
-  if (!store.workspace.lasso.points.length) return ''
-  return store.workspace.lasso.points.map((p) => `${p.x},${p.y}`).join(' ')
+onUnmounted(() => {
+  window.removeEventListener('resize', resizeCanvas)
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId)
+  }
 })
+
+watch(
+  () => store.workspace.lasso.points,
+  () => {
+    scheduleRender()
+  },
+  { deep: true },
+)
+
+watch(
+  () => store.workspace.lasso.active,
+  (isActive) => {
+    if (!isActive && store.workspace.lasso.points.length > 0) {
+      // Renderiza uma última vez com o caminho fechado
+      scheduleRender()
+    } else if (!isActive) {
+      // Limpa o canvas se o laço for cancelado
+      if (ctx) {
+        const canvas = lassoCanvasRef.value
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+      }
+    }
+  },
+)
 </script>
 
 <template>
-  <div v-if="isVisible" class="lasso-overlay-container">
-    <svg width="100%" height="100%">
-      <polygon :points="pointsString" class="lasso-path" />
-    </svg>
+  <div class="lasso-overlay-container">
+    <canvas ref="lassoCanvasRef"></canvas>
   </div>
 </template>
 
@@ -33,12 +108,9 @@ const pointsString = computed(() => {
   pointer-events: none;
   z-index: 200;
 }
-.lasso-path {
-  fill: rgba(13, 153, 255, 0.2);
-  stroke: var(--c-primary);
-  stroke-width: 1.5;
-  stroke-dasharray: 4 2;
-  stroke-linejoin: round;
-  stroke-linecap: round;
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 </style>

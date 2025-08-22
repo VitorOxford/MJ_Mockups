@@ -1,27 +1,66 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useImageAdjustmentsStore } from '@/stores/imageAdjustmentsStore'
 
 const store = useCanvasStore()
 const adjustmentsStore = useImageAdjustmentsStore()
+const menuRef = ref(null)
 
 const isLassoSelectionActive = computed(() => store.workspace.lasso.points.length > 2)
+
+// ** NOVA LÓGICA DE POSICIONAMENTO INTELIGENTE **
+const menuStyle = computed(() => {
+  const { x, y } = store.workspace.contextMenuPosition
+  let finalX = x
+  let finalY = y
+
+  if (menuRef.value) {
+    const menuWidth = menuRef.value.offsetWidth
+    const menuHeight = menuRef.value.offsetHeight
+    const windowWidth = window.innerWidth
+    const windowHeight = window.innerHeight
+
+    if (x + menuWidth > windowWidth) {
+      finalX = x - menuWidth
+    }
+    if (y + menuHeight > windowHeight) {
+      finalY = y - menuHeight
+    }
+  }
+
+  return {
+    top: `${finalY}px`,
+    left: `${finalX}px`,
+  }
+})
 
 function onClick(action) {
   action()
   store.showContextMenu(false)
 }
+
+// Garante que o menu se reposicione se o conteúdo mudar
+watch(
+  () => store.workspace.isContextMenuVisible,
+  async (isVisible) => {
+    if (isVisible && menuRef.value) {
+      // Força o re-cálculo do computed
+      await menuRef.value.getBoundingClientRect()
+    }
+  },
+)
+
+onMounted(() => {
+  if (store.workspace.isContextMenuVisible && menuRef.value) {
+    // Garante a posição correta na primeira renderização
+    menuRef.value.getBoundingClientRect()
+  }
+})
 </script>
 
 <template>
-  <div
-    class="context-menu"
-    :style="{
-      top: `${store.workspace.contextMenuPosition.y}px`,
-      left: `${store.workspace.contextMenuPosition.x}px`,
-    }"
-  >
+  <div ref="menuRef" class="context-menu" :style="menuStyle">
     <ul>
       <li @click="onClick(() => store.duplicateLayer(store.contextMenuTargetLayerId))">
         Duplicar Camada
@@ -62,14 +101,26 @@ function onClick(action) {
 
 <style scoped>
 .context-menu {
-  position: absolute;
+  position: fixed; /* Mude para 'fixed' para se posicionar relativo à janela */
   background-color: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   z-index: 1000;
   padding: var(--spacing-2) 0;
+  /* Garante que ele fique visível para medição inicial */
+  visibility: hidden;
+  opacity: 0;
+  animation: fadeIn 0.1s forwards;
 }
+
+@keyframes fadeIn {
+  to {
+    visibility: visible;
+    opacity: 1;
+  }
+}
+
 ul {
   list-style: none;
   margin: 0;

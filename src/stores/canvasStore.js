@@ -16,6 +16,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     pan: { x: 0, y: 0 },
     zoom: 1,
     viewMode: 'edit',
+    isTransforming: false,
     document: { width: 1920, height: 1080 },
     rulers: { visible: true, unit: 'cm' },
     grid: { visible: true },
@@ -40,12 +41,16 @@ export const useCanvasStore = defineStore('canvas', () => {
       dimCmW: 0,
       dimCmH: 0,
     },
+    // Objeto de estado para transformações da Bounding Box
     transformStart: {
-      scale: 1,
-      rotation: 0,
-      layerRotation: 0,
-      mousePos: { x: 0, y: 0 },
+      layerId: null,
+      type: null,
+      initialScale: 1,
+      initialRotation: 0,
+      startMousePos: { x: 0, y: 0 },
       layerCenter: { x: 0, y: 0 },
+      initialDistance: 1,
+      initialAngle: 0,
     },
     isContextMenuVisible: false,
     contextMenuPosition: { x: 0, y: 0 },
@@ -88,6 +93,7 @@ export const useCanvasStore = defineStore('canvas', () => {
       visible: true,
       opacity: 1,
       image: null,
+      proxyImage: null,
       fullResImage: null,
       imageUrl: url,
       x: 0,
@@ -121,7 +127,10 @@ export const useCanvasStore = defineStore('canvas', () => {
     img.crossOrigin = 'Anonymous'
     img.src = imageUrl
     img.onload = () => {
-      // Se a imagem for muito grande, cria um proxy menor para performance
+      newLayer.fullResImage = img
+      newLayer.metadata.originalWidth = img.naturalWidth
+      newLayer.metadata.originalHeight = img.naturalHeight
+
       if (img.naturalWidth > MAX_RENDER_SIZE || img.naturalHeight > MAX_RENDER_SIZE) {
         const ratio = Math.min(
           MAX_RENDER_SIZE / img.naturalWidth,
@@ -132,24 +141,18 @@ export const useCanvasStore = defineStore('canvas', () => {
         proxyCanvas.height = img.naturalHeight * ratio
         const proxyCtx = proxyCanvas.getContext('2d')
         proxyCtx.drawImage(img, 0, 0, proxyCanvas.width, proxyCanvas.height)
-        newLayer.image = proxyCanvas // A imagem de renderização é o proxy
-        newLayer.fullResImage = img // A imagem original é guardada para edições
+        newLayer.image = proxyCanvas
+        newLayer.proxyImage = proxyCanvas
       } else {
-        // Se a imagem for pequena, pode ser usada diretamente
         newLayer.image = img
-        newLayer.fullResImage = img
+        newLayer.proxyImage = img
       }
 
-      newLayer.metadata.originalWidth = img.naturalWidth
-      newLayer.metadata.originalHeight = img.naturalHeight
-
       if (type === 'mockup' && !initialPosition) {
-        // Apenas se for o mockup principal
         workspace.document.width = img.naturalWidth
         workspace.document.height = img.naturalHeight
       }
 
-      // Define a posição
       if (initialPosition) {
         newLayer.x = initialPosition.x
         newLayer.y = initialPosition.y
@@ -161,7 +164,6 @@ export const useCanvasStore = defineStore('canvas', () => {
       layers.value.push(newLayer)
       selectLayer(newLayer.id)
       if (!initialPosition) {
-        // Só faz o frame se não for um recorte
         frameLayer(newLayer.id)
       }
     }
@@ -215,12 +217,14 @@ export const useCanvasStore = defineStore('canvas', () => {
       selection.dimCmH = 0
     }
   }
+
   function startLasso(point) {
     workspace.lasso.active = true
     workspace.lasso.points = [point]
     workspace.lasso.boundingBox = { x: point.x, y: point.y, width: 0, height: 0 }
     calculateAndUpdateDimensions(0, 0)
   }
+
   function updateLasso(point) {
     if (!workspace.lasso.active) return
     workspace.lasso.points.push(point)
@@ -239,9 +243,9 @@ export const useCanvasStore = defineStore('canvas', () => {
     workspace.lasso.boundingBox = bbox
     calculateAndUpdateDimensions(bbox.width, bbox.height)
   }
-  function endLasso() {
-    workspace.lasso.active = false
-  }
+
+  function endLasso() {}
+
   function startSelection(mouse) {
     workspace.selection.active = true
     workspace.selection.startX = mouse.x
@@ -250,6 +254,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     workspace.selection.endY = mouse.y
     updateSelection(mouse)
   }
+
   function updateSelection(mouse) {
     if (!workspace.selection.active) return
     const sel = workspace.selection
@@ -259,9 +264,11 @@ export const useCanvasStore = defineStore('canvas', () => {
     sel.height = Math.abs(sel.startY - sel.endY)
     calculateAndUpdateDimensions(sel.width, sel.height)
   }
+
   function endSelection() {
     workspace.selection.active = false
   }
+
   function addLayer(assetData, type) {
     const url = getSupabaseImageUrl(`${type}s`, assetData.file_path)
     processAndAddLayer({
@@ -271,21 +278,24 @@ export const useCanvasStore = defineStore('canvas', () => {
       metadata: assetData.metadata || { dpi: 96 },
     })
   }
-  function addLocalLayer(file, type, dataUrl) {
+
+  function addLocalLayer(file, type, dataUrl, metadata) {
     processAndAddLayer({
       name: file.name,
       type: type,
       imageUrl: dataUrl,
-      metadata: { dpi: 96 },
+      metadata: metadata || { dpi: 96 },
       file: file,
     })
   }
+
   function updateLayerProperties(id, properties) {
     const index = layers.value.findIndex((l) => l.id === id)
     if (index > -1) {
       layers.value[index] = { ...layers.value[index], ...properties }
     }
   }
+
   function resizeMockup(newWidthPx, newHeightPx) {
     if (!mockupLayer.value) return
     const newScale = newWidthPx / mockupLayer.value.metadata.originalWidth
@@ -293,15 +303,18 @@ export const useCanvasStore = defineStore('canvas', () => {
     workspace.document.width = newWidthPx
     workspace.document.height = newHeightPx
   }
+
   function showContextMenu(visible, position = { x: 0, y: 0 }, layerId = null) {
     workspace.isContextMenuVisible = visible
     workspace.contextMenuPosition = position
     workspace.contextMenuTargetLayerId = layerId
     if (visible && layerId) selectLayer(layerId)
   }
+
   function showResizeModal(visible) {
     workspace.isResizeModalVisible = visible
   }
+
   function frameLayer(layerId) {
     const layer = layers.value.find((l) => l.id === layerId)
     const canvasEl = document.getElementById('mainCanvas')
@@ -316,52 +329,71 @@ export const useCanvasStore = defineStore('canvas', () => {
     workspace.pan.x = canvasEl.clientWidth / 2 - layer.x * newZoom
     workspace.pan.y = canvasEl.clientHeight / 2 - layer.y * newZoom
   }
+
   function setRulerUnit(unit) {
     workspace.rulers.unit = unit
   }
+
   function togglePreviewInteractivity() {
     workspace.previewIsInteractive = !workspace.previewIsInteractive
     if (!workspace.previewIsInteractive) endLasso()
   }
+
   function setPreviewZoom(zoom) {
     workspace.previewZoom = zoom
   }
+
   function selectLayer(id) {
     selectedLayerId.value = id
   }
-  function startLayerResize(mousePos, initialScale) {
-    workspace.transformStart.mousePos = mousePos
-    workspace.transformStart.scale = initialScale
+
+  // ================================================================= //
+  // LÓGICA DE TRANSFORMAÇÃO DA BOUNDING BOX CORRIGIDA                 //
+  // ================================================================= //
+
+  function startLayerTransform(config) {
+    workspace.isTransforming = true
+    workspace.transformStart = { ...workspace.transformStart, ...config }
   }
-  function updateLayerResize(mousePos) {
-    if (!selectedLayer.value) return
-    const { transformStart } = workspace
-    const dx = mousePos.x - transformStart.mousePos.x
-    const dy = mousePos.y - transformStart.mousePos.y
-    const originalDistance = Math.sqrt(
-      transformStart.mousePos.x ** 2 + transformStart.mousePos.y ** 2,
-    )
-    const newDistance = Math.sqrt(
-      (transformStart.mousePos.x + dx) ** 2 + (transformStart.mousePos.y + dy) ** 2,
-    )
-    if (originalDistance === 0) return
-    const scaleFactor = newDistance / originalDistance
-    const newScale = transformStart.scale * scaleFactor
-    updateLayerProperties(selectedLayer.value.id, { scale: Math.max(0.01, newScale) })
+
+  function updateLayerTransform(currentMousePos) {
+    const {
+      type,
+      layerId,
+      initialScale,
+      initialRotation,
+      startMousePos,
+      layerCenter,
+      initialDistance,
+      initialAngle,
+    } = workspace.transformStart
+    const layer = layers.value.find((l) => l.id === layerId)
+    if (!layer) return
+
+    if (type === 'rotate') {
+      const currentAngle = Math.atan2(
+        currentMousePos.y - layerCenter.y,
+        currentMousePos.x - layerCenter.x,
+      )
+      const angleDiff = currentAngle - initialAngle
+      updateLayerProperties(layerId, { rotation: initialRotation + angleDiff })
+    } else if (type.startsWith('resize')) {
+      const currentDistance = Math.sqrt(
+        Math.pow(currentMousePos.x - layerCenter.x, 2) +
+          Math.pow(currentMousePos.y - layerCenter.y, 2),
+      )
+      if (initialDistance === 0) return
+      const scaleFactor = currentDistance / initialDistance
+      const newScale = initialScale * scaleFactor
+      updateLayerProperties(layerId, { scale: Math.max(0.01, newScale) })
+    }
   }
-  function startLayerRotation(startAngle) {
-    if (!selectedLayer.value) return
-    workspace.transformStart.rotation = startAngle
-    workspace.transformStart.layerRotation = selectedLayer.value.rotation
+
+  function endLayerTransform() {
+    workspace.isTransforming = false
+    workspace.transformStart.type = null
   }
-  function updateLayerRotation(currentAngle) {
-    if (!selectedLayer.value) return
-    const { transformStart } = workspace
-    const angleDiff = currentAngle - transformStart.rotation
-    updateLayerProperties(selectedLayer.value.id, {
-      rotation: transformStart.layerRotation + angleDiff,
-    })
-  }
+
   function deleteLayer(id) {
     const index = layers.value.findIndex((l) => l.id === id)
     if (index > -1) {
@@ -376,6 +408,7 @@ export const useCanvasStore = defineStore('canvas', () => {
       }
     }
   }
+
   function bringForward(id) {
     const index = layers.value.findIndex((l) => l.id === id)
     if (index < layers.value.length - 1) {
@@ -383,6 +416,7 @@ export const useCanvasStore = defineStore('canvas', () => {
       layers.value.splice(index + 1, 0, layer)
     }
   }
+
   function sendBackward(id) {
     const index = layers.value.findIndex((l) => l.id === id)
     if (index > 0) {
@@ -390,30 +424,46 @@ export const useCanvasStore = defineStore('canvas', () => {
       layers.value.splice(index - 1, 0, layer)
     }
   }
+
   function moveLayer(fromIndex, toIndex) {
     const [movedLayer] = layers.value.splice(fromIndex, 1)
     layers.value.splice(toIndex, 0, movedLayer)
   }
+
   function toggleViewMode() {
+    if (workspace.viewMode === 'preview') {
+      workspace.previewZoom = 1
+    }
+
     workspace.viewMode = workspace.viewMode === 'edit' ? 'preview' : 'edit'
+
     if (workspace.viewMode === 'edit' && selectedLayer.value) {
       frameLayer(selectedLayer.value.id)
     }
   }
+
   function getSupabaseImageUrl(bucket, path) {
     if (!bucket || !path) return null
     const { data } = supabase.storage.from(bucket).getPublicUrl(path)
     return data.publicUrl
   }
+
   function setActiveTool(tool) {
     activeTool.value = tool
+    if (tool !== 'lasso-select') {
+      workspace.lasso.points = []
+      workspace.lasso.active = false
+    }
   }
+
   function updateWorkspace(properties) {
     Object.assign(workspace, properties)
   }
+
   function showPreviewSidebar(visible) {
     workspace.isPreviewSidebarVisible = visible
   }
+
   function showSignatureModal(visible) {
     workspace.isSignatureModalVisible = visible
   }
@@ -442,16 +492,19 @@ export const useCanvasStore = defineStore('canvas', () => {
     const sourceLayer = layers.value.find((l) => l.id === layerId)
     if (!sourceLayer) return
 
-    const newLayerData = JSON.parse(JSON.stringify(sourceLayer))
-
-    newLayerData.id = uuidv4()
-    newLayerData.name = `${sourceLayer.name} Cópia`
-    newLayerData.image = sourceLayer.image
-    newLayerData.fullResImage = sourceLayer.fullResImage
+    const newLayer = reactive({
+      ...JSON.parse(JSON.stringify(sourceLayer)),
+      id: uuidv4(),
+      name: `${sourceLayer.name} Cópia`,
+      image: sourceLayer.image,
+      proxyImage: sourceLayer.proxyImage,
+      fullResImage: sourceLayer.fullResImage,
+      originalFile: sourceLayer.originalFile,
+    })
 
     const sourceIndex = layers.value.findIndex((l) => l.id === layerId)
-    layers.value.splice(sourceIndex + 1, 0, reactive(newLayerData))
-    selectLayer(newLayerData.id)
+    layers.value.splice(sourceIndex + 1, 0, newLayer)
+    selectLayer(newLayer.id)
   }
 
   function createImageFromSelection(sourceLayer, deleteFromOriginal = false) {
@@ -548,10 +601,9 @@ export const useCanvasStore = defineStore('canvas', () => {
     startSelection,
     updateSelection,
     endSelection,
-    startLayerResize,
-    updateLayerResize,
-    startLayerRotation,
-    updateLayerRotation,
+    startLayerTransform,
+    updateLayerTransform,
+    endLayerTransform,
     showContextMenu,
     showResizeModal,
     resizeMockup,
