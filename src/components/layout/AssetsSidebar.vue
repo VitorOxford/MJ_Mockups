@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { supabase } from '@/supabase'
 import { useCanvasStore } from '@/stores/canvasStore'
 
@@ -9,41 +9,44 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const store = useCanvasStore()
-const categories = ref([])
+const mockupList = ref([]) // Uma lista simples para guardar os arquivos encontrados
 const loading = ref(true)
 
-// Computada para garantir que só mostramos categorias que de fato têm mockups
-const mockupCategories = computed(() => {
-  return categories.value.filter((c) => c.assets.length > 0)
-})
-
 function getThumbUrl(path) {
-  // Busca a URL pública da imagem diretamente do bucket 'mockups'
+  // Esta função continua correta, ela pega a URL pública do arquivo no bucket
   const { data } = supabase.storage.from('mockups').getPublicUrl(path)
   return data.publicUrl
 }
 
 function handleAssetClick(asset) {
-  // Adiciona a camada ao canvas, definindo o tipo como 'mockup'
-  store.addLayer(asset, 'mockup')
+  // Prepara o objeto de dados que a `canvasStore` espera
+  const assetData = {
+    name: asset.name,
+    file_path: asset.name, // Para o storage, o nome do arquivo é o seu caminho
+    metadata: { dpi: 96 }, // Adiciona um DPI padrão
+  }
+  store.addLayer(assetData, 'mockup')
   emit('close')
 }
 
 async function fetchAssets() {
   loading.value = true
   try {
-    // Modificamos a query para buscar na tabela 'categories' apenas as que são do tipo 'mockups'
-    // e trazer os seus 'assets' relacionados.
-    const { data, error } = await supabase
-      .from('categories')
-      .select(`name, type, assets (id, name, file_path, metadata)`)
-      .eq('type', 'mockups') // <-- Esta linha é a chave da nova lógica
-      .order('name', { referencedTable: 'assets', ascending: true })
+    // --- LÓGICA PRINCIPAL ALTERADA ---
+    // Agora, listamos os arquivos DIRETAMENTE do bucket 'mockups'
+    const { data, error } = await supabase.storage.from('mockups').list()
 
     if (error) throw error
-    categories.value = data
+
+    // Filtra a lista para garantir que estamos a lidar apenas com imagens
+    // e remove ficheiros de sistema que o Supabase possa criar.
+    mockupList.value = data.filter(file =>
+      /\.(png|jpg|jpeg|webp)$/i.test(file.name)
+    )
+
   } catch (error) {
-    console.error('Erro ao buscar mockups:', error)
+    console.error('Erro ao varrer o bucket de mockups:', error)
+    mockupList.value = [] // Garante que a lista fica vazia em caso de erro
   } finally {
     loading.value = false
   }
@@ -61,23 +64,19 @@ onMounted(fetchAssets)
 
       <div class="assets-content">
         <div v-if="loading" class="loader">A carregar Mockups...</div>
-        <div v-else-if="mockupCategories.length === 0" class="empty-state">
+        <div v-else-if="mockupList.length === 0" class="empty-state">
           Nenhum mockup encontrado.
         </div>
-        <div v-else class="categories-list">
-          <div v-for="category in mockupCategories" :key="category.name" class="category-box">
-            <h4 class="category-title">{{ category.name }}</h4>
-            <div class="thumbnails-grid">
-              <div
-                v-for="asset in category.assets"
-                :key="asset.id"
-                class="thumbnail"
-                :style="{ backgroundImage: `url(${getThumbUrl(asset.file_path)})` }"
-                @click="handleAssetClick(asset)"
-                :title="asset.name"
-              ></div>
-            </div>
-          </div>
+
+        <div v-else class="thumbnails-grid">
+          <div
+            v-for="asset in mockupList"
+            :key="asset.id"
+            class="thumbnail"
+            :style="{ backgroundImage: `url(${getThumbUrl(asset.name)})` }"
+            @click="handleAssetClick(asset)"
+            :title="asset.name"
+          ></div>
         </div>
       </div>
     </aside>
@@ -85,6 +84,7 @@ onMounted(fetchAssets)
 </template>
 
 <style scoped>
+/* Os estilos foram mantidos e simplificados, removendo a necessidade de classes de categoria */
 .assets-sidebar-overlay {
   position: fixed;
   top: 0;
@@ -105,8 +105,6 @@ onMounted(fetchAssets)
   flex-direction: column;
   box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1);
 }
-
-/* Cabeçalho fixo que substitui as abas */
 .assets-header {
   padding: 14px 16px;
   border-bottom: 1px solid var(--c-border);
@@ -117,7 +115,6 @@ onMounted(fetchAssets)
   font-weight: 600;
   margin: 0;
 }
-
 .assets-content {
   flex-grow: 1;
   overflow-y: auto;
@@ -128,16 +125,6 @@ onMounted(fetchAssets)
   text-align: center;
   color: var(--c-text-secondary);
   margin-top: 40px;
-}
-.category-box {
-  margin-bottom: 24px;
-}
-.category-title {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--c-text-secondary);
-  text-transform: uppercase;
-  margin-bottom: 12px;
 }
 .thumbnails-grid {
   display: grid;
