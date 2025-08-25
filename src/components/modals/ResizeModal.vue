@@ -10,6 +10,7 @@ const currentUnit = ref('cm')
 const inputWidth = ref(0)
 const inputHeight = ref(0)
 const keepAspectRatio = ref(true)
+const originalAspectRatio = ref(1)
 
 const units = {
   px: 1,
@@ -35,6 +36,9 @@ watch(
   () => store.selectedLayer,
   (newLayer) => {
     if (newLayer) {
+      if (newLayer.metadata.originalWidth > 0) {
+        originalAspectRatio.value = newLayer.metadata.originalHeight / newLayer.metadata.originalWidth
+      }
       updateInputs()
     }
   },
@@ -47,38 +51,40 @@ watch(currentUnit, () => {
 
 function updateInputs() {
   if (!layer.value) return
-  const widthPx = layer.value.metadata.originalWidth * layer.value.scale
-  const heightPx = layer.value.metadata.originalHeight * layer.value.scale
+  const widthPx = layer.value.metadata.originalWidth * layer.value.scaleX
+  const heightPx = layer.value.metadata.originalHeight * layer.value.scaleY
   inputWidth.value = convertFromPx(widthPx, currentUnit.value).toFixed(2)
   inputHeight.value = convertFromPx(heightPx, currentUnit.value).toFixed(2)
 }
 
 function handleWidthInput() {
-  if (!keepAspectRatio.value || !layer.value) return
-  const aspectRatio = layer.value.metadata.originalHeight / layer.value.metadata.originalWidth
-  inputHeight.value = (inputWidth.value * aspectRatio).toFixed(2)
+  if (keepAspectRatio.value) {
+    inputHeight.value = (inputWidth.value * originalAspectRatio.value).toFixed(2)
+  }
 }
 
 function handleHeightInput() {
-  if (!keepAspectRatio.value || !layer.value) return
-  const aspectRatio = layer.value.metadata.originalWidth / layer.value.metadata.originalHeight
-  inputWidth.value = (inputHeight.value * aspectRatio).toFixed(2)
+  if (keepAspectRatio.value) {
+    inputWidth.value = (inputHeight.value / originalAspectRatio.value).toFixed(2)
+  }
 }
 
-// --- LÓGICA DE APLICAÇÃO ATUALIZADA ---
 function applyResize() {
   if (!layer.value) return
 
   const newWidthPx = convertToPx(parseFloat(inputWidth.value), currentUnit.value)
   const newHeightPx = convertToPx(parseFloat(inputHeight.value), currentUnit.value)
 
-  // Verifica se a camada atual é o mockup principal
+  // A lógica agora calcula scaleX e scaleY separadamente
+  const newScaleX = newWidthPx / layer.value.metadata.originalWidth
+  const newScaleY = newHeightPx / layer.value.metadata.originalHeight
+
+  // Para mockups, redimensiona o documento
   if (layer.value.id === store.mockupLayer?.id) {
     store.resizeMockup(newWidthPx, newHeightPx)
   } else {
-    // Para outras camadas (patterns, etc.), apenas atualiza a escala
-    const newScale = newWidthPx / layer.value.metadata.originalWidth
-    store.updateLayerProperties(layer.value.id, { scale: newScale })
+    // Para outras camadas, atualiza as escalas
+    store.updateLayerProperties(layer.value.id, { scaleX: newScaleX, scaleY: newScaleY })
   }
 
   store.showResizeModal(false)
