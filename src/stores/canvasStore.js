@@ -98,8 +98,8 @@ export const useCanvasStore = defineStore('canvas', () => {
       imageUrl: url,
       x: 0,
       y: 0,
-      scaleX: 1, // ALTERADO
-      scaleY: 1, // ALTERADO
+      scaleX: 1,
+      scaleY: 1,
       rotation: 0,
       metadata: { ...metadata, dpi: metadata?.dpi || 96, originalWidth: 0, originalHeight: 0 },
       originalFile: null,
@@ -128,7 +128,13 @@ export const useCanvasStore = defineStore('canvas', () => {
     img.crossOrigin = 'Anonymous'
     img.src = imageUrl
     img.onload = () => {
-      newLayer.fullResImage = img
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      
+      newLayer.fullResImage = canvas // Agora usamos um canvas para poder apagar
       newLayer.metadata.originalWidth = img.naturalWidth
       newLayer.metadata.originalHeight = img.naturalHeight
 
@@ -145,8 +151,8 @@ export const useCanvasStore = defineStore('canvas', () => {
         newLayer.image = proxyCanvas
         newLayer.proxyImage = proxyCanvas
       } else {
-        newLayer.image = img
-        newLayer.proxyImage = img
+        newLayer.image = canvas
+        newLayer.proxyImage = canvas
       }
 
       if (type === 'mockup' && !initialPosition) {
@@ -383,7 +389,7 @@ export const useCanvasStore = defineStore('canvas', () => {
       )
       const angleDiff = currentAngle - initialAngle
       updateLayerProperties(layerId, { rotation: initialRotation + angleDiff })
-    } else if (type.startsWith('resize')) {
+    } else if (type.startsWith('resize-')) {
       const currentDistance = Math.sqrt(
         Math.pow(currentMousePos.x - layerCenter.x, 2) +
           Math.pow(currentMousePos.y - layerCenter.y, 2),
@@ -516,57 +522,63 @@ export const useCanvasStore = defineStore('canvas', () => {
     layers.value.splice(sourceIndex + 1, 0, newLayer)
     selectLayer(newLayer.id)
   }
+  
+  // Função auxiliar para transformar coordenadas da tela para a camada
+  function _getLayerLocalCoordsFromScreen(screenPoint, layer) {
+    const { pan, zoom } = workspace;
+    const workspaceX = (screenPoint.x - pan.x) / zoom;
+    const workspaceY = (screenPoint.y - pan.y) / zoom;
 
-  function createImageFromSelection(sourceLayer, deleteFromOriginal = false) {
-    if (!sourceLayer || !workspace.lasso.points.length) return
+    const cos = Math.cos(-layer.rotation);
+    const sin = Math.sin(-layer.rotation);
+    const dx = workspaceX - layer.x;
+    const dy = workspaceY - layer.y;
 
-    const { pan, zoom } = workspace
-    const sourceImage = sourceLayer.fullResImage || sourceLayer.image
+    let layerX = (dx * cos - dy * sin) / layer.scaleX;
+    let layerY = (dx * sin + dy * cos) / layer.scaleY;
 
-    const tempCanvas = document.createElement('canvas')
-    tempCanvas.width = sourceLayer.metadata.originalWidth
-    tempCanvas.height = sourceLayer.metadata.originalHeight
-    const tempCtx = tempCanvas.getContext('2d')
-
-    const path = new Path2D()
-    workspace.lasso.points.forEach((p, index) => {
-      const workspaceX = (p.x - pan.x) / zoom
-      const workspaceY = (p.y - pan.y) / zoom
-
-      const cos = Math.cos(-sourceLayer.rotation)
-      const sin = Math.sin(-sourceLayer.rotation)
-      const dx = workspaceX - sourceLayer.x
-      const dy = workspaceY - sourceLayer.y
-      
-      let layerX = (dx * cos - dy * sin) / sourceLayer.scaleX
-      let layerY = (dx * sin + dy * cos) / sourceLayer.scaleY
-
-      if (sourceLayer.adjustments.flipH) {
-        layerX = -layerX
-      }
-      if (sourceLayer.adjustments.flipV) {
-        layerY = -layerY
-      }
-
-      layerX += sourceLayer.metadata.originalWidth / 2
-      layerY += sourceLayer.metadata.originalHeight / 2
-
-
-      if (index === 0) path.moveTo(layerX, layerY)
-      else path.lineTo(layerX, layerY)
-    })
-    path.closePath()
-
-    tempCtx.clip(path)
-    tempCtx.drawImage(sourceImage, 0, 0)
-
-    if (deleteFromOriginal && sourceLayer.image.getContext) {
-      const originalCtx = sourceLayer.image.getContext('2d')
-      originalCtx.save()
-      originalCtx.globalCompositeOperation = 'destination-out'
-      originalCtx.fill(path)
-      originalCtx.restore()
+    if (layer.adjustments.flipH) {
+      layerX = -layerX;
     }
+    if (layer.adjustments.flipV) {
+      layerY = -layerY;
+    }
+
+    return {
+      x: layerX + layer.metadata.originalWidth / 2,
+      y: layerY + layer.metadata.originalHeight / 2,
+    };
+  }
+
+  // Função centralizada para criar um Path2D a partir do laço
+  function _createPathFromLasso(sourceLayer) {
+    if (!sourceLayer || workspace.lasso.points.length < 3) return null;
+
+    const path = new Path2D();
+    workspace.lasso.points.forEach((p, index) => {
+      const localCoords = _getLayerLocalCoordsFromScreen(p, sourceLayer);
+      if (index === 0) {
+        path.moveTo(localCoords.x, localCoords.y);
+      } else {
+        path.lineTo(localCoords.x, localCoords.y);
+      }
+    });
+    path.closePath();
+    return path;
+  }
+
+  function createImageFromSelection(sourceLayer) {
+    const path = _createPathFromLasso(sourceLayer);
+    if (!path) return;
+    
+    const sourceImage = sourceLayer.fullResImage;
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = sourceLayer.metadata.originalWidth;
+    tempCanvas.height = sourceLayer.metadata.originalHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    tempCtx.clip(path);
+    tempCtx.drawImage(sourceImage, 0, 0);
 
     processAndAddLayer({
       name: `${sourceLayer.name} Recorte`,
@@ -574,24 +586,47 @@ export const useCanvasStore = defineStore('canvas', () => {
       imageUrl: tempCanvas.toDataURL(),
       metadata: { dpi: sourceLayer.metadata.dpi },
       initialPosition: { x: sourceLayer.x, y: sourceLayer.y },
-    })
+    });
 
-    workspace.lasso.points = []
-    workspace.lasso.active = false
+    workspace.lasso.points = [];
+    workspace.lasso.active = false;
+  }
+  
+  function deleteSelection(layerId) {
+    const sourceLayer = layers.value.find((l) => l.id === layerId);
+    const path = _createPathFromLasso(sourceLayer);
+    if (!path) return;
+
+    const originalCtx = sourceLayer.fullResImage.getContext('2d');
+    originalCtx.save();
+    originalCtx.globalCompositeOperation = 'destination-out';
+    originalCtx.fill(path);
+    originalCtx.restore();
+
+    // Força a atualização da imagem do proxy também, se existir
+    if (sourceLayer.proxyImage && sourceLayer.proxyImage.getContext) {
+       const proxyCtx = sourceLayer.proxyImage.getContext('2d');
+       proxyCtx.clearRect(0, 0, sourceLayer.proxyImage.width, sourceLayer.proxyImage.height);
+       proxyCtx.drawImage(sourceLayer.fullResImage, 0, 0, sourceLayer.proxyImage.width, sourceLayer.proxyImage.height);
+    }
+    
+    // Força uma re-renderização
+    sourceLayer.image = sourceLayer.fullResImage;
+    
+    workspace.lasso.points = [];
+    workspace.lasso.active = false;
   }
 
   function duplicateSelection(layerId) {
-    const sourceLayer = layers.value.find((l) => l.id === layerId)
-    createImageFromSelection(sourceLayer, false)
+    const sourceLayer = layers.value.find((l) => l.id === layerId);
+    createImageFromSelection(sourceLayer);
   }
 
   function cutoutSelection(layerId) {
-    const sourceLayer = layers.value.find((l) => l.id === layerId)
-    alert(
-      'A funcionalidade de apagar a seleção da camada original está em desenvolvimento. Por agora, isto irá duplicar a sua seleção para uma nova camada.',
-    )
-    createImageFromSelection(sourceLayer, false)
+    alert('Esta função ainda está em desenvolvimento. Por enquanto, ela irá duplicar a seleção.');
+    duplicateSelection(layerId);
   }
+
 
   return {
     layers,
@@ -637,5 +672,6 @@ export const useCanvasStore = defineStore('canvas', () => {
     duplicateLayer,
     duplicateSelection,
     cutoutSelection,
+    deleteSelection, // Exporta a nova função
   }
 })
