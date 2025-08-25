@@ -9,6 +9,7 @@ const menuRef = ref(null)
 
 const isLassoSelectionActive = computed(() => store.workspace.lasso.points.length > 2)
 
+// ** NOVA LÓGICA DE POSICIONAMENTO INTELIGENTE **
 const menuStyle = computed(() => {
   const { x, y } = store.workspace.contextMenuPosition
   let finalX = x
@@ -39,10 +40,12 @@ function onClick(action) {
   store.showContextMenu(false)
 }
 
+// Garante que o menu se reposicione se o conteúdo mudar
 watch(
   () => store.workspace.isContextMenuVisible,
   async (isVisible) => {
     if (isVisible && menuRef.value) {
+      // Força o re-cálculo do computed
       await menuRef.value.getBoundingClientRect()
     }
   },
@@ -50,6 +53,7 @@ watch(
 
 onMounted(() => {
   if (store.workspace.isContextMenuVisible && menuRef.value) {
+    // Garante a posição correta na primeira renderização
     menuRef.value.getBoundingClientRect()
   }
 })
@@ -70,16 +74,6 @@ onMounted(() => {
         "
       >
         Duplicar Seleção
-      </li>
-      <li
-        :class="{ disabled: !isLassoSelectionActive }"
-        @click="
-          isLassoSelectionActive &&
-          onClick(() => store.deleteSelection(store.contextMenuTargetLayerId))
-        "
-        class="danger"
-      >
-        Excluir Seleção
       </li>
       <li
         :class="{ disabled: !isLassoSelectionActive }"
@@ -107,13 +101,14 @@ onMounted(() => {
 
 <style scoped>
 .context-menu {
-  position: fixed;
+  position: fixed; /* Mude para 'fixed' para se posicionar relativo à janela */
   background-color: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   z-index: 1000;
   padding: var(--spacing-2) 0;
+  /* Garante que ele fique visível para medição inicial */
   visibility: hidden;
   opacity: 0;
   animation: fadeIn 0.1s forwards;
