@@ -65,12 +65,12 @@ function renderEditMode(canvas) {
 
     ctx.translate(layer.x, layer.y)
 
-    const scaleX = finalAdj.flipH ? -1 : 1
-    const scaleY = finalAdj.flipV ? -1 : 1
-    ctx.scale(scaleX, scaleY)
+    const scaleXFlip = finalAdj.flipH ? -1 : 1
+    const scaleYFlip = finalAdj.flipV ? -1 : 1
+    ctx.scale(scaleXFlip, scaleYFlip)
 
     ctx.rotate(layer.rotation)
-    ctx.scale(layer.scale, layer.scale)
+    ctx.scale(layer.scaleX, layer.scaleY) // ALTERADO
     ctx.globalAlpha = layer.opacity
 
     ctx.drawImage(
@@ -85,14 +85,10 @@ function renderEditMode(canvas) {
   ctx.restore()
 }
 
-// ================================================================= //
-// NOVA RENDERIZAÇÃO DE PREVIEW COM TRANSFORMAÇÃO CORRETA            //
-// ================================================================= //
 function renderPreviewMode(canvas) {
   const mainMockup = store.mockupLayer
   if (!mainMockup || !mainMockup.image) return
 
-  // 1. Prepara o fundo e calcula a geometria do mockup na tela
   ctx.save()
   ctx.fillStyle = getComputedStyle(document.documentElement)
     .getPropertyValue('--c-surface-dark')
@@ -100,8 +96,8 @@ function renderPreviewMode(canvas) {
   ctx.fillRect(0, 0, canvas.width, canvas.height)
 
   const padding = 0.9
-  const finalMockupWidth = mainMockup.metadata.originalWidth * mainMockup.scale
-  const finalMockupHeight = mainMockup.metadata.originalHeight * mainMockup.scale
+  const finalMockupWidth = mainMockup.metadata.originalWidth * mainMockup.scaleX
+  const finalMockupHeight = mainMockup.metadata.originalHeight * mainMockup.scaleY
 
   if (finalMockupWidth === 0 || finalMockupHeight === 0) {
     ctx.restore()
@@ -119,12 +115,10 @@ function renderPreviewMode(canvas) {
   const dx = (canvas.width - finalWidthOnScreen) / 2
   const dy = (canvas.height - finalHeightOnScreen) / 2
 
-  // 2. Cria uma máscara de recorte na área do mockup
   ctx.beginPath()
   ctx.rect(dx, dy, finalWidthOnScreen, finalHeightOnScreen)
   ctx.clip()
 
-  // 3. Renderiza as estampas usando createPattern com uma matriz de transformação precisa
   const patterns = store.layers.filter((l) => l.type === 'pattern' && l.visible && l.image)
   for (const layer of patterns) {
     const imageToRender = store.workspace.isTransforming ? layer.proxyImage : layer.fullResImage
@@ -135,23 +129,20 @@ function renderPreviewMode(canvas) {
     const patternW = imageToRender.width
     const patternH = imageToRender.height
 
-    // Constrói a matriz que combina a transformação do mockup na tela com a da estampa
     const matrix = new DOMMatrix()
-      .translate(dx, dy) // Move para a posição do mockup na tela
-      .scale(finalScale) // Aplica a escala do mockup na tela
-      .translate(layer.x, layer.y) // Move para a posição central da estampa
-      .rotate((layer.rotation * 180) / Math.PI) // Gira a estampa
-      .scale(layer.scale) // Aplica a escala da estampa
-      .translate(-patternW / 2, -patternH / 2) // **ESSENCIAL**: Compensa a origem do padrão para o centro
+      .translate(dx, dy)
+      .scale(finalScale)
+      .translate(layer.x, layer.y)
+      .rotate((layer.rotation * 180) / Math.PI)
+      .scale(layer.scaleX, layer.scaleY) // ALTERADO
+      .translate(-patternW / 2, -patternH / 2)
 
     pattern.setTransform(matrix)
 
-    // Preenche a área do mockup com a estampa transformada
     ctx.fillStyle = pattern
     ctx.fillRect(dx, dy, finalWidthOnScreen, finalHeightOnScreen)
   }
 
-  // 4. Renderiza as camadas de mockup (overlays) por cima
   const mockups = store.layers.filter((l) => l.type === 'mockup' && l.visible && l.image)
   for (const layer of mockups) {
     ctx.save()
@@ -160,7 +151,7 @@ function renderPreviewMode(canvas) {
     ctx.restore()
   }
 
-  ctx.restore() // Limpa a máscara de recorte
+  ctx.restore()
 }
 
 function initCanvas() {
@@ -225,8 +216,6 @@ function onHandleMouseDown({ event, type }) {
   store.startLayerTransform({
     layerId: layer.id,
     type: type,
-    initialScale: layer.scale,
-    initialRotation: layer.rotation,
     startMousePos: startMousePos,
     layerCenter: layerCenter,
     initialDistance: Math.sqrt(dx * dx + dy * dy),
@@ -286,8 +275,8 @@ function handleMouseMove(e) {
 
   if (isDraggingLayer && store.selectedLayer) {
     const workspaceCoords = screenToWorkspaceCoords(mouse)
-    const newX = workspaceCoords.x - dragStartOffset.x / store.selectedLayer.scale
-    const newY = workspaceCoords.y - dragStartOffset.y / store.selectedLayer.scale
+    const newX = workspaceCoords.x - dragStartOffset.x / store.selectedLayer.scaleX
+    const newY = workspaceCoords.y - dragStartOffset.y / store.selectedLayer.scaleY
     store.updateLayerProperties(store.selectedLayer.id, { x: newX, y: newY })
     return
   }
@@ -363,8 +352,8 @@ function getLayerAtPosition(screenCoords) {
     const layer = store.layers[i]
     if (!layer.image || !layer.visible) continue
     const layerCoords = screenToLayerCoords(screenCoords, layer)
-    const halfW = (layer.metadata.originalWidth * layer.scale) / 2
-    const halfH = (layer.metadata.originalHeight * layer.scale) / 2
+    const halfW = (layer.metadata.originalWidth * layer.scaleX) / 2
+    const halfH = (layer.metadata.originalHeight * layer.scaleY) / 2
     if (
       layerCoords.x >= -halfW &&
       layerCoords.x <= halfW &&
