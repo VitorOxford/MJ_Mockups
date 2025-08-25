@@ -101,65 +101,61 @@ function handleItemClick(item) {
 </template>
 
 <style scoped>
-.assets-sidebar-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.2);
-  /* Alteração aqui: z-index aumentado para ficar na frente do menu */
-  z-index: 1050; 
+.top-menu-bar {
+  grid-area: top-menu;
   display: flex;
-  justify-content: flex-end;
-}
-.assets-sidebar {
-  width: var(--assets-width);
-  height: 100%;
   background-color: var(--c-surface);
-  border-left: 1px solid var(--c-border);
-  display: flex;
-  flex-direction: column;
-  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1);
-}
-.assets-header {
-  padding: 14px 16px;
   border-bottom: 1px solid var(--c-border);
-  flex-shrink: 0;
+  padding: 0 var(--spacing-3);
+  height: 40px;
+  z-index: 1000;
 }
-.assets-header h3 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0;
+.menu-item {
+  position: relative;
 }
-.assets-content {
-  flex-grow: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-.loader,
-.empty-state {
-  text-align: center;
+.menu-item button {
+  padding: 0 var(--spacing-3);
+  height: 100%;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
   color: var(--c-text-secondary);
-  margin-top: 40px;
 }
-.thumbnails-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-  gap: 12px;
+.menu-item button:hover,
+.menu-item button.active {
+  background-color: var(--c-surface-dark);
+  color: var(--c-text-primary);
 }
-.thumbnail {
-  aspect-ratio: 1 / 1;
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: var(--c-surface);
+  border: 1px solid var(--c-border);
   border-radius: var(--radius-md);
-  background-color: var(--c-background);
-  background-size: cover;
-  background-position: center;
-  cursor: pointer;
-  border: 2px solid transparent;
-  transition: all 0.2s ease;
+  box-shadow: var(--shadow-lg);
+  padding: var(--spacing-2) 0;
+  z-index: 1100;
+  min-width: 220px;
+  list-style: none;
 }
-.thumbnail:hover {
-  transform: scale(1.05);
-  border-color: var(--c-primary-hover);
+.dropdown-menu li a {
+  display: block;
+  padding: var(--spacing-2) var(--spacing-4);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dropdown-menu li a:hover {
+  background-color: var(--c-surface-dark);
+  color: var(--c-primary);
+}
+.dropdown-menu li a.disabled {
+  color: var(--c-text-tertiary);
+  cursor: not-allowed;
+  background-color: transparent !important;
+}
+.divider {
+  height: 1px;
+  background-color: var(--c-border);
+  margin: var(--spacing-2) 0;
 }
 </style>
