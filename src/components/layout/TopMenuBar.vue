@@ -108,7 +108,8 @@ function handleItemClick(item) {
   border-bottom: 1px solid var(--c-border);
   padding: 0 var(--spacing-3);
   height: 40px;
-  z-index: 1000;
+  /* Reduzido para ficar abaixo da gaveta de ativos */
+  z-index: 990;
 }
 .menu-item {
   position: relative;
