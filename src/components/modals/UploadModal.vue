@@ -10,7 +10,6 @@ const emit = defineEmits(['close'])
 
 const store = useCanvasStore()
 const dragOverEstampa = ref(false)
-const dragOverMockup = ref(false)
 
 async function handleFile(file, type) {
   if (!file || !file.type.startsWith('image/')) {
@@ -19,17 +18,14 @@ async function handleFile(file, type) {
   }
 
   try {
-    // 1. Tenta ler os metadados da imagem
     const exif = await exifr.parse(file)
-    const dpi = exif?.XResolution || 96 // Usa o DPI do arquivo ou assume 96 como padrão
+    const dpi = exif?.XResolution || 96
 
-    // 2. Passa o objeto File diretamente para o store, que usará URL.createObjectURL
     const imageUrl = URL.createObjectURL(file)
-    store.addLocalLayer(file, type, imageUrl, { dpi }) // <-- Passa o DPI lido
+    store.addLocalLayer(file, type, imageUrl, { dpi })
     emit('close')
   } catch (error) {
     console.error('Não foi possível ler os metadados da imagem, usando DPI padrão.', error)
-    // Se falhar a leitura, continua o processo com o DPI padrão
     const imageUrl = URL.createObjectURL(file)
     store.addLocalLayer(file, type, imageUrl, { dpi: 96 })
     emit('close')
@@ -39,7 +35,6 @@ async function handleFile(file, type) {
 function onDrop(e, type) {
   e.preventDefault()
   dragOverEstampa.value = false
-  dragOverMockup.value = false
   if (e.dataTransfer.files && e.dataTransfer.files[0]) {
     handleFile(e.dataTransfer.files[0], type)
   }
@@ -55,7 +50,7 @@ function onFileSelect(e, type) {
 <template>
   <div v-if="isVisible" class="modal-overlay" @click.self="emit('close')">
     <div class="modal-content">
-      <h3 class="modal-title">Carregar Ficheiros</h3>
+      <h3 class="modal-title">Carregar Ficheiro de Estampa</h3>
       <div class="drop-zones">
         <div
           class="drop-zone"
@@ -71,24 +66,6 @@ function onFileSelect(e, type) {
             type="file"
             ref="estampaInput"
             @change="onFileSelect($event, 'pattern')"
-            accept="image/*"
-            hidden
-          />
-        </div>
-        <div
-          class="drop-zone"
-          :class="{ 'drag-over': dragOverMockup }"
-          @click="$refs.mockupInput.click()"
-          @dragover.prevent="dragOverMockup = true"
-          @dragleave.prevent="dragOverMockup = false"
-          @drop="onDrop($event, 'mockup')"
-        >
-          <p>Carregar <strong>Mockup</strong></p>
-          <span>Arraste e largue ou clique aqui</span>
-          <input
-            type="file"
-            ref="mockupInput"
-            @change="onFileSelect($event, 'mockup')"
             accept="image/*"
             hidden
           />
@@ -118,7 +95,7 @@ function onFileSelect(e, type) {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   width: 90%;
-  max-width: 600px;
+  max-width: 500px; /* Reduzido para uma única coluna */
   text-align: center;
 }
 .modal-title {
@@ -128,7 +105,6 @@ function onFileSelect(e, type) {
 }
 .drop-zones {
   display: flex;
-  gap: var(--spacing-5);
   margin-bottom: var(--spacing-5);
 }
 .drop-zone {
@@ -145,7 +121,7 @@ function onFileSelect(e, type) {
 }
 .drop-zone.drag-over {
   border-color: var(--c-primary);
-  background-color: #e6f5ff; /* Um azul muito claro */
+  background-color: #e6f5ff;
 }
 .drop-zone p {
   font-size: var(--fs-base);
