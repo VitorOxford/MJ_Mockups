@@ -9,21 +9,19 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const store = useCanvasStore()
-const mockupList = ref([]) // Uma lista simples para guardar os arquivos encontrados
+const mockupList = ref([])
 const loading = ref(true)
 
 function getThumbUrl(path) {
-  // Esta função continua correta, ela pega a URL pública do arquivo no bucket
   const { data } = supabase.storage.from('mockups').getPublicUrl(path)
   return data.publicUrl
 }
 
 function handleAssetClick(asset) {
-  // Prepara o objeto de dados que a `canvasStore` espera
   const assetData = {
     name: asset.name,
-    file_path: asset.name, // Para o storage, o nome do arquivo é o seu caminho
-    metadata: { dpi: 96 }, // Adiciona um DPI padrão
+    file_path: asset.name,
+    metadata: { dpi: 96 },
   }
   store.addLayer(assetData, 'mockup')
   emit('close')
@@ -32,21 +30,14 @@ function handleAssetClick(asset) {
 async function fetchAssets() {
   loading.value = true
   try {
-    // --- LÓGICA PRINCIPAL ALTERADA ---
-    // Agora, listamos os arquivos DIRETAMENTE do bucket 'mockups'
     const { data, error } = await supabase.storage.from('mockups').list()
-
     if (error) throw error
-
-    // Filtra a lista para garantir que estamos a lidar apenas com imagens
-    // e remove ficheiros de sistema que o Supabase possa criar.
     mockupList.value = data.filter(file =>
       /\.(png|jpg|jpeg|webp)$/i.test(file.name)
     )
-
   } catch (error) {
     console.error('Erro ao varrer o bucket de mockups:', error)
-    mockupList.value = [] // Garante que a lista fica vazia em caso de erro
+    mockupList.value = []
   } finally {
     loading.value = false
   }
@@ -61,13 +52,11 @@ onMounted(fetchAssets)
       <div class="assets-header">
         <h3>Adicionar Mockup</h3>
       </div>
-
       <div class="assets-content">
         <div v-if="loading" class="loader">A carregar Mockups...</div>
         <div v-else-if="mockupList.length === 0" class="empty-state">
           Nenhum mockup encontrado.
         </div>
-
         <div v-else class="thumbnails-grid">
           <div
             v-for="asset in mockupList"
@@ -84,7 +73,6 @@ onMounted(fetchAssets)
 </template>
 
 <style scoped>
-/* Os estilos foram mantidos e simplificados, removendo a necessidade de classes de categoria */
 .assets-sidebar-overlay {
   position: fixed;
   top: 0;
@@ -92,7 +80,8 @@ onMounted(fetchAssets)
   width: 100vw;
   height: 100vh;
   background-color: rgba(0, 0, 0, 0.2);
-  z-index: 250;
+  /* Aumentado para um valor bem alto para garantir que fique na frente */
+  z-index: 1100;
   display: flex;
   justify-content: flex-end;
 }
