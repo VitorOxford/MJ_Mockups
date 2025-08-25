@@ -41,11 +41,11 @@ export const useCanvasStore = defineStore('canvas', () => {
       dimCmW: 0,
       dimCmH: 0,
     },
-    // Objeto de estado para transformações da Bounding Box
     transformStart: {
       layerId: null,
       type: null,
-      initialScale: 1,
+      initialScaleX: 1,
+      initialScaleY: 1,
       initialRotation: 0,
       startMousePos: { x: 0, y: 0 },
       layerCenter: { x: 0, y: 0 },
@@ -66,8 +66,8 @@ export const useCanvasStore = defineStore('canvas', () => {
   const rulerSource = computed(() => {
     const layer = selectedLayer.value || mockupLayer.value
     if (layer && layer.metadata.originalWidth) {
-      const width = layer.metadata.originalWidth * layer.scale
-      const height = layer.metadata.originalHeight * layer.scale
+      const width = layer.metadata.originalWidth * layer.scaleX
+      const height = layer.metadata.originalHeight * layer.scaleY
       return {
         width,
         height,
@@ -98,7 +98,8 @@ export const useCanvasStore = defineStore('canvas', () => {
       imageUrl: url,
       x: 0,
       y: 0,
-      scale: 1,
+      scaleX: 1, // ALTERADO
+      scaleY: 1, // ALTERADO
       rotation: 0,
       metadata: { ...metadata, dpi: metadata?.dpi || 96, originalWidth: 0, originalHeight: 0 },
       originalFile: null,
@@ -201,9 +202,9 @@ export const useCanvasStore = defineStore('canvas', () => {
       selection.dimCmH = 0
       return
     }
-    const { metadata, scale } = mockupLayer.value
-    const totalMockupPxW = metadata.originalWidth * scale
-    const totalMockupPxH = metadata.originalHeight * scale
+    const { metadata, scaleX, scaleY } = mockupLayer.value
+    const totalMockupPxW = metadata.originalWidth * scaleX
+    const totalMockupPxH = metadata.originalHeight * scaleY
     const totalMockupCmW = (totalMockupPxW / metadata.dpi) * 2.54
     const totalMockupCmH = (totalMockupPxH / metadata.dpi) * 2.54
     if (totalMockupPxW > 0) {
@@ -298,8 +299,9 @@ export const useCanvasStore = defineStore('canvas', () => {
 
   function resizeMockup(newWidthPx, newHeightPx) {
     if (!mockupLayer.value) return
-    const newScale = newWidthPx / mockupLayer.value.metadata.originalWidth
-    updateLayerProperties(mockupLayer.value.id, { scale: newScale })
+    const newScaleX = newWidthPx / mockupLayer.value.metadata.originalWidth
+    const newScaleY = newHeightPx / mockupLayer.value.metadata.originalHeight
+    updateLayerProperties(mockupLayer.value.id, { scaleX: newScaleX, scaleY: newScaleY })
     workspace.document.width = newWidthPx
     workspace.document.height = newHeightPx
   }
@@ -320,8 +322,8 @@ export const useCanvasStore = defineStore('canvas', () => {
     const canvasEl = document.getElementById('mainCanvas')
     if (!layer || !canvasEl || !layer.metadata.originalWidth) return
     const padding = 0.8
-    const layerWidth = layer.metadata.originalWidth * layer.scale
-    const layerHeight = layer.metadata.originalHeight * layer.scale
+    const layerWidth = layer.metadata.originalWidth * layer.scaleX
+    const layerHeight = layer.metadata.originalHeight * layer.scaleY
     const zoomX = (canvasEl.clientWidth * padding) / layerWidth
     const zoomY = (canvasEl.clientHeight * padding) / layerHeight
     const newZoom = Math.min(zoomX, zoomY, 2)
@@ -347,20 +349,24 @@ export const useCanvasStore = defineStore('canvas', () => {
     selectedLayerId.value = id
   }
 
-  // ================================================================= //
-  // LÓGICA DE TRANSFORMAÇÃO DA BOUNDING BOX CORRIGIDA                 //
-  // ================================================================= //
-
   function startLayerTransform(config) {
     workspace.isTransforming = true
-    workspace.transformStart = { ...workspace.transformStart, ...config }
+    const layer = layers.value.find((l) => l.id === config.layerId)
+    if (!layer) return
+    workspace.transformStart = {
+      ...config,
+      initialScaleX: layer.scaleX,
+      initialScaleY: layer.scaleY,
+      initialRotation: layer.rotation,
+    }
   }
 
   function updateLayerTransform(currentMousePos) {
     const {
       type,
       layerId,
-      initialScale,
+      initialScaleX,
+      initialScaleY,
       initialRotation,
       startMousePos,
       layerCenter,
@@ -384,8 +390,12 @@ export const useCanvasStore = defineStore('canvas', () => {
       )
       if (initialDistance === 0) return
       const scaleFactor = currentDistance / initialDistance
-      const newScale = initialScale * scaleFactor
-      updateLayerProperties(layerId, { scale: Math.max(0.01, newScale) })
+      const newScaleX = initialScaleX * scaleFactor
+      const newScaleY = initialScaleY * scaleFactor
+      updateLayerProperties(layerId, {
+        scaleX: Math.max(0.01, newScaleX),
+        scaleY: Math.max(0.01, newScaleY),
+      })
     }
   }
 
@@ -525,11 +535,22 @@ export const useCanvasStore = defineStore('canvas', () => {
 
       const cos = Math.cos(-sourceLayer.rotation)
       const sin = Math.sin(-sourceLayer.rotation)
-      const dx = (workspaceX - sourceLayer.x) / sourceLayer.scale
-      const dy = (workspaceY - sourceLayer.y) / sourceLayer.scale
+      const dx = workspaceX - sourceLayer.x
+      const dy = workspaceY - sourceLayer.y
+      
+      let layerX = (dx * cos - dy * sin) / sourceLayer.scaleX
+      let layerY = (dx * sin + dy * cos) / sourceLayer.scaleY
 
-      const layerX = dx * cos - dy * sin + sourceLayer.metadata.originalWidth / 2
-      const layerY = dx * sin + dy * cos + sourceLayer.metadata.originalHeight / 2
+      if (sourceLayer.adjustments.flipH) {
+        layerX = -layerX
+      }
+      if (sourceLayer.adjustments.flipV) {
+        layerY = -layerY
+      }
+
+      layerX += sourceLayer.metadata.originalWidth / 2
+      layerY += sourceLayer.metadata.originalHeight / 2
+
 
       if (index === 0) path.moveTo(layerX, layerY)
       else path.lineTo(layerX, layerY)
