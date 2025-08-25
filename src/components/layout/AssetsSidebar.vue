@@ -3,46 +3,47 @@ import { ref, onMounted, computed } from 'vue'
 import { supabase } from '@/supabase'
 import { useCanvasStore } from '@/stores/canvasStore'
 
-// NOVO: Define as props e emits para o controlo do painel
 const props = defineProps({
   isVisible: Boolean,
 })
 const emit = defineEmits(['close'])
 
 const store = useCanvasStore()
-const activeTab = ref('patterns')
 const categories = ref([])
 const loading = ref(true)
 
-const filteredCategories = computed(() => {
-  return categories.value.filter((c) => c.type === activeTab.value && c.assets.length > 0)
+// Computada para garantir que só mostramos categorias que de fato têm mockups
+const mockupCategories = computed(() => {
+  return categories.value.filter((c) => c.assets.length > 0)
 })
 
 function getThumbUrl(path) {
-  const { data } = supabase.storage.from(activeTab.value).getPublicUrl(path)
+  // Busca a URL pública da imagem diretamente do bucket 'mockups'
+  const { data } = supabase.storage.from('mockups').getPublicUrl(path)
   return data.publicUrl
 }
 
 function handleAssetClick(asset) {
-  // O tipo é a aba ativa, mas convertemos para singular (ex: 'patterns' -> 'pattern')
-  const type = activeTab.value.slice(0, -1)
-  store.addLayer(asset, type)
-  // Fecha o painel após adicionar uma camada
+  // Adiciona a camada ao canvas, definindo o tipo como 'mockup'
+  store.addLayer(asset, 'mockup')
   emit('close')
 }
 
 async function fetchAssets() {
   loading.value = true
   try {
+    // Modificamos a query para buscar na tabela 'categories' apenas as que são do tipo 'mockups'
+    // e trazer os seus 'assets' relacionados.
     const { data, error } = await supabase
       .from('categories')
       .select(`name, type, assets (id, name, file_path, metadata)`)
+      .eq('type', 'mockups') // <-- Esta linha é a chave da nova lógica
       .order('name', { referencedTable: 'assets', ascending: true })
 
     if (error) throw error
     categories.value = data
   } catch (error) {
-    console.error('Erro ao buscar ativos:', error)
+    console.error('Erro ao buscar mockups:', error)
   } finally {
     loading.value = false
   }
@@ -54,25 +55,17 @@ onMounted(fetchAssets)
 <template>
   <div v-if="isVisible" class="assets-sidebar-overlay" @click.self="emit('close')">
     <aside class="assets-sidebar">
-      <div class="assets-tabs">
-        <button @click="activeTab = 'patterns'" :class="{ active: activeTab === 'patterns' }">
-          Estampas
-        </button>
-        <button @click="activeTab = 'mockups'" :class="{ active: activeTab === 'mockups' }">
-          Mockups
-        </button>
-        <button @click="activeTab = 'fabrics'" :class="{ active: activeTab === 'fabrics' }">
-          Tecidos
-        </button>
+      <div class="assets-header">
+        <h3>Adicionar Mockup</h3>
       </div>
 
       <div class="assets-content">
-        <div v-if="loading" class="loader">Carregando...</div>
-        <div v-else-if="filteredCategories.length === 0" class="empty-state">
-          Nenhum ativo encontrado para "{{ activeTab }}".
+        <div v-if="loading" class="loader">A carregar Mockups...</div>
+        <div v-else-if="mockupCategories.length === 0" class="empty-state">
+          Nenhum mockup encontrado.
         </div>
         <div v-else class="categories-list">
-          <div v-for="category in filteredCategories" :key="category.name" class="category-box">
+          <div v-for="category in mockupCategories" :key="category.name" class="category-box">
             <h4 class="category-title">{{ category.name }}</h4>
             <div class="thumbnails-grid">
               <div
@@ -92,7 +85,6 @@ onMounted(fetchAssets)
 </template>
 
 <style scoped>
-/* NOVO: Estilo para a sobreposição que fecha o painel ao clicar fora */
 .assets-sidebar-overlay {
   position: fixed;
   top: 0;
@@ -102,10 +94,8 @@ onMounted(fetchAssets)
   background-color: rgba(0, 0, 0, 0.2);
   z-index: 250;
   display: flex;
-  justify-content: flex-end; /* Alinha o painel à direita */
+  justify-content: flex-end;
 }
-
-/* O painel agora é um elemento flutuante */
 .assets-sidebar {
   width: var(--assets-width);
   height: 100%;
@@ -115,30 +105,19 @@ onMounted(fetchAssets)
   flex-direction: column;
   box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1);
 }
-.assets-tabs {
-  display: flex;
+
+/* Cabeçalho fixo que substitui as abas */
+.assets-header {
+  padding: 14px 16px;
   border-bottom: 1px solid var(--c-border);
   flex-shrink: 0;
 }
-.assets-tabs button {
-  flex: 1;
-  background: none;
-  border: none;
-  padding: 12px 8px;
-  font-size: 0.9rem;
+.assets-header h3 {
+  font-size: 1rem;
   font-weight: 600;
-  color: var(--c-text-secondary);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all 0.2s ease;
+  margin: 0;
 }
-.assets-tabs button:hover {
-  color: var(--c-text-primary);
-}
-.assets-tabs button.active {
-  color: var(--c-primary);
-  border-bottom-color: var(--c-primary);
-}
+
 .assets-content {
   flex-grow: 1;
   overflow-y: auto;
