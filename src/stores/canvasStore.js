@@ -25,7 +25,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     previewRenderScale: 1,
     lasso: {
       active: false,
-      points: [],
+      points: [], // Agora armazena coordenadas do WORKSPACE
       boundingBox: { x: 0, y: 0, width: 0, height: 0 },
     },
     selection: {
@@ -134,7 +134,7 @@ export const useCanvasStore = defineStore('canvas', () => {
       const ctx = canvas.getContext('2d')
       ctx.drawImage(img, 0, 0)
       
-      newLayer.fullResImage = canvas // Agora usamos um canvas para poder apagar
+      newLayer.fullResImage = canvas
       newLayer.metadata.originalWidth = img.naturalWidth
       newLayer.metadata.originalHeight = img.naturalHeight
 
@@ -227,31 +227,17 @@ export const useCanvasStore = defineStore('canvas', () => {
 
   function startLasso(point) {
     workspace.lasso.active = true
-    workspace.lasso.points = [point]
-    workspace.lasso.boundingBox = { x: point.x, y: point.y, width: 0, height: 0 }
-    calculateAndUpdateDimensions(0, 0)
+    workspace.lasso.points = [point] // Ponto já está em coordenadas de workspace
   }
 
   function updateLasso(point) {
     if (!workspace.lasso.active) return
-    workspace.lasso.points.push(point)
-    const { points } = workspace.lasso
-    let minX = points[0].x
-    let maxX = points[0].x
-    let minY = points[0].y
-    let maxY = points[0].y
-    for (let i = 1; i < points.length; i++) {
-      minX = Math.min(minX, points[i].x)
-      maxX = Math.max(maxX, points[i].x)
-      minY = Math.min(minY, points[i].y)
-      maxY = Math.max(maxY, points[i].y)
-    }
-    const bbox = { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
-    workspace.lasso.boundingBox = bbox
-    calculateAndUpdateDimensions(bbox.width, bbox.height)
+    workspace.lasso.points.push(point) // Ponto já está em coordenadas de workspace
   }
 
-  function endLasso() {}
+  function endLasso() {
+    workspace.lasso.active = false
+  }
 
   function startSelection(mouse) {
     workspace.selection.active = true
@@ -522,63 +508,58 @@ export const useCanvasStore = defineStore('canvas', () => {
     layers.value.splice(sourceIndex + 1, 0, newLayer)
     selectLayer(newLayer.id)
   }
-  
-  // Função auxiliar para transformar coordenadas da tela para a camada
-  function _getLayerLocalCoordsFromScreen(screenPoint, layer) {
-    const { pan, zoom } = workspace;
-    const workspaceX = (screenPoint.x - pan.x) / zoom;
-    const workspaceY = (screenPoint.y - pan.y) / zoom;
 
-    const cos = Math.cos(-layer.rotation);
-    const sin = Math.sin(-layer.rotation);
-    const dx = workspaceX - layer.x;
-    const dy = workspaceY - layer.y;
+  function _getLayerLocalCoordsFromWorkspace(workspacePoint, layer) {
+    const cos = Math.cos(-layer.rotation)
+    const sin = Math.sin(-layer.rotation)
+    const dx = workspacePoint.x - layer.x
+    const dy = workspacePoint.y - layer.y
 
-    let layerX = (dx * cos - dy * sin) / layer.scaleX;
-    let layerY = (dx * sin + dy * cos) / layer.scaleY;
+    let layerX = (dx * cos - dy * sin) / layer.scaleX
+    let layerY = (dx * sin + dy * cos) / layer.scaleY
 
     if (layer.adjustments.flipH) {
-      layerX = -layerX;
+      layerX = -layerX
     }
     if (layer.adjustments.flipV) {
-      layerY = -layerY;
+      layerY = -layerY
     }
 
     return {
       x: layerX + layer.metadata.originalWidth / 2,
       y: layerY + layer.metadata.originalHeight / 2,
-    };
+    }
   }
 
-  // Função centralizada para criar um Path2D a partir do laço
   function _createPathFromLasso(sourceLayer) {
-    if (!sourceLayer || workspace.lasso.points.length < 3) return null;
+    if (!sourceLayer || workspace.lasso.points.length < 3) return null
 
-    const path = new Path2D();
+    const path = new Path2D()
     workspace.lasso.points.forEach((p, index) => {
-      const localCoords = _getLayerLocalCoordsFromScreen(p, sourceLayer);
+      // **CORREÇÃO AQUI**
+      const localCoords = _getLayerLocalCoordsFromWorkspace(p, sourceLayer)
       if (index === 0) {
-        path.moveTo(localCoords.x, localCoords.y);
+        path.moveTo(localCoords.x, localCoords.y)
       } else {
-        path.lineTo(localCoords.x, localCoords.y);
+        path.lineTo(localCoords.x, localCoords.y)
       }
-    });
-    path.closePath();
-    return path;
+    })
+    path.closePath()
+    return path
   }
 
   function createImageFromSelection(sourceLayer) {
-    const path = _createPathFromLasso(sourceLayer);
-    if (!path) return;
-    
-    const sourceImage = sourceLayer.fullResImage;
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = sourceLayer.metadata.originalWidth;
-    tempCanvas.height = sourceLayer.metadata.originalHeight;
-    const tempCtx = tempCanvas.getContext('2d');
+    const path = _createPathFromLasso(sourceLayer)
+    if (!path) return
 
-    tempCtx.clip(path);
-    tempCtx.drawImage(sourceImage, 0, 0);
+    const sourceImage = sourceLayer.fullResImage
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = sourceLayer.metadata.originalWidth
+    tempCanvas.height = sourceLayer.metadata.originalHeight
+    const tempCtx = tempCanvas.getContext('2d')
+
+    tempCtx.clip(path)
+    tempCtx.drawImage(sourceImage, 0, 0)
 
     processAndAddLayer({
       name: `${sourceLayer.name} Recorte`,
@@ -586,47 +567,50 @@ export const useCanvasStore = defineStore('canvas', () => {
       imageUrl: tempCanvas.toDataURL(),
       metadata: { dpi: sourceLayer.metadata.dpi },
       initialPosition: { x: sourceLayer.x, y: sourceLayer.y },
-    });
+    })
 
-    workspace.lasso.points = [];
-    workspace.lasso.active = false;
+    workspace.lasso.points = []
+    workspace.lasso.active = false
   }
-  
+
   function deleteSelection(layerId) {
-    const sourceLayer = layers.value.find((l) => l.id === layerId);
-    const path = _createPathFromLasso(sourceLayer);
-    if (!path) return;
+    const sourceLayer = layers.value.find((l) => l.id === layerId)
+    const path = _createPathFromLasso(sourceLayer)
+    if (!path) return
 
-    const originalCtx = sourceLayer.fullResImage.getContext('2d');
-    originalCtx.save();
-    originalCtx.globalCompositeOperation = 'destination-out';
-    originalCtx.fill(path);
-    originalCtx.restore();
+    const originalCtx = sourceLayer.fullResImage.getContext('2d')
+    originalCtx.save()
+    originalCtx.globalCompositeOperation = 'destination-out'
+    originalCtx.fill(path)
+    originalCtx.restore()
 
-    // Força a atualização da imagem do proxy também, se existir
     if (sourceLayer.proxyImage && sourceLayer.proxyImage.getContext) {
-       const proxyCtx = sourceLayer.proxyImage.getContext('2d');
-       proxyCtx.clearRect(0, 0, sourceLayer.proxyImage.width, sourceLayer.proxyImage.height);
-       proxyCtx.drawImage(sourceLayer.fullResImage, 0, 0, sourceLayer.proxyImage.width, sourceLayer.proxyImage.height);
+      const proxyCtx = sourceLayer.proxyImage.getContext('2d')
+      proxyCtx.clearRect(0, 0, sourceLayer.proxyImage.width, sourceLayer.proxyImage.height)
+      proxyCtx.drawImage(
+        sourceLayer.fullResImage,
+        0,
+        0,
+        sourceLayer.proxyImage.width,
+        sourceLayer.proxyImage.height,
+      )
     }
-    
-    // Força uma re-renderização
-    sourceLayer.image = sourceLayer.fullResImage;
-    
-    workspace.lasso.points = [];
-    workspace.lasso.active = false;
+
+    sourceLayer.image = sourceLayer.fullResImage
+
+    workspace.lasso.points = []
+    workspace.lasso.active = false
   }
 
   function duplicateSelection(layerId) {
-    const sourceLayer = layers.value.find((l) => l.id === layerId);
-    createImageFromSelection(sourceLayer);
+    const sourceLayer = layers.value.find((l) => l.id === layerId)
+    createImageFromSelection(sourceLayer)
   }
 
   function cutoutSelection(layerId) {
-    alert('Esta função ainda está em desenvolvimento. Por enquanto, ela irá duplicar a seleção.');
-    duplicateSelection(layerId);
+    alert('Esta função ainda está em desenvolvimento. Por enquanto, ela irá duplicar a seleção.')
+    duplicateSelection(layerId)
   }
-
 
   return {
     layers,
@@ -672,6 +656,6 @@ export const useCanvasStore = defineStore('canvas', () => {
     duplicateLayer,
     duplicateSelection,
     cutoutSelection,
-    deleteSelection, // Exporta a nova função
+    deleteSelection,
   }
 })
