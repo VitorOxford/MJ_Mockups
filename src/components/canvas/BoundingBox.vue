@@ -46,6 +46,7 @@ function handleMouseDown(e, handleType, cursor) {
         class="handle rotate-handle"
         @mousedown="handleMouseDown($event, 'rotate', 'grabbing')"
       ></div>
+      
       <div
         class="handle resize-handle top-left"
         @mousedown="handleMouseDown($event, 'resize-tl', 'nwse-resize')"
@@ -61,6 +62,23 @@ function handleMouseDown(e, handleType, cursor) {
       <div
         class="handle resize-handle bottom-right"
         @mousedown="handleMouseDown($event, 'resize-br', 'nwse-resize')"
+      ></div>
+
+      <div
+        class="handle resize-handle-side top"
+        @mousedown="handleMouseDown($event, 'resize-t', 'ns-resize')"
+      ></div>
+      <div
+        class="handle resize-handle-side right"
+        @mousedown="handleMouseDown($event, 'resize-r', 'ew-resize')"
+      ></div>
+      <div
+        class="handle resize-handle-side bottom"
+        @mousedown="handleMouseDown($event, 'resize-b', 'ns-resize')"
+      ></div>
+      <div
+        class="handle resize-handle-side left"
+        @mousedown="handleMouseDown($event, 'resize-l', 'ew-resize')"
       ></div>
     </div>
   </div>
@@ -87,15 +105,15 @@ function handleMouseDown(e, handleType, cursor) {
 }
 .handle {
   position: absolute;
-  width: 12px;
-  height: 12px;
   background-color: var(--c-white);
   border: 1.5px solid var(--c-primary);
-  border-radius: var(--radius-full);
   pointer-events: all;
   z-index: 101;
 }
 .rotate-handle {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
   top: -30px;
   left: 50%;
   transform: translateX(-50%);
@@ -112,26 +130,24 @@ function handleMouseDown(e, handleType, cursor) {
   transform: translateX(-50%);
 }
 .resize-handle {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
   transform: translate(-50%, -50%);
 }
-.resize-handle.top-left {
-  top: 0;
-  left: 0;
-  cursor: nwse-resize;
+.resize-handle.top-left { top: 0; left: 0; cursor: nwse-resize; }
+.resize-handle.top-right { top: 0; left: 100%; cursor: nesw-resize; }
+.resize-handle.bottom-left { top: 100%; left: 0; cursor: nesw-resize; }
+.resize-handle.bottom-right { top: 100%; left: 100%; cursor: nwse-resize; }
+
+/* ESTILOS PARA NOVAS ALÇAS */
+.resize-handle-side {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
 }
-.resize-handle.top-right {
-  top: 0;
-  left: 100%;
-  cursor: nesw-resize;
-}
-.resize-handle.bottom-left {
-  top: 100%;
-  left: 0;
-  cursor: nesw-resize;
-}
-.resize-handle.bottom-right {
-  top: 100%;
-  left: 100%;
-  cursor: nwse-resize;
-}
+.resize-handle-side.top { top: 0; left: 50%; transform: translate(-50%, -50%); cursor: ns-resize; }
+.resize-handle-side.right { top: 50%; left: 100%; transform: translate(-50%, -50%); cursor: ew-resize; }
+.resize-handle-side.bottom { top: 100%; left: 50%; transform: translate(-50%, -50%); cursor: ns-resize; }
+.resize-handle-side.left { top: 50%; left: 0; transform: translate(-50%, -50%); cursor: ew-resize; }
 </style>
