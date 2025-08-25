@@ -101,61 +101,65 @@ function handleItemClick(item) {
 </template>
 
 <style scoped>
-.top-menu-bar {
-  grid-area: top-menu;
-  display: flex;
-  background-color: var(--c-surface);
-  border-bottom: 1px solid var(--c-border);
-  padding: 0 var(--spacing-3);
-  height: 40px;
-  z-index: 1000;
-}
-.menu-item {
-  position: relative;
-}
-.menu-item button {
-  padding: 0 var(--spacing-3);
-  height: 100%;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--c-text-secondary);
-}
-.menu-item button:hover,
-.menu-item button.active {
-  background-color: var(--c-surface-dark);
-  color: var(--c-text-primary);
-}
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
+.assets-sidebar-overlay {
+  position: fixed;
+  top: 0;
   left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.2);
+  /* Alteração aqui: z-index aumentado para ficar na frente do menu */
+  z-index: 1050; 
+  display: flex;
+  justify-content: flex-end;
+}
+.assets-sidebar {
+  width: var(--assets-width);
+  height: 100%;
   background-color: var(--c-surface);
-  border: 1px solid var(--c-border);
+  border-left: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1);
+}
+.assets-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--c-border);
+  flex-shrink: 0;
+}
+.assets-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+.assets-content {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+.loader,
+.empty-state {
+  text-align: center;
+  color: var(--c-text-secondary);
+  margin-top: 40px;
+}
+.thumbnails-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 12px;
+}
+.thumbnail {
+  aspect-ratio: 1 / 1;
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  padding: var(--spacing-2) 0;
-  z-index: 1100;
-  min-width: 220px;
-  list-style: none;
-}
-.dropdown-menu li a {
-  display: block;
-  padding: var(--spacing-2) var(--spacing-4);
+  background-color: var(--c-background);
+  background-size: cover;
+  background-position: center;
   cursor: pointer;
-  white-space: nowrap;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
 }
-.dropdown-menu li a:hover {
-  background-color: var(--c-surface-dark);
-  color: var(--c-primary);
-}
-.dropdown-menu li a.disabled {
-  color: var(--c-text-tertiary);
-  cursor: not-allowed;
-  background-color: transparent !important;
-}
-.divider {
-  height: 1px;
-  background-color: var(--c-border);
-  margin: var(--spacing-2) 0;
+.thumbnail:hover {
+  transform: scale(1.05);
+  border-color: var(--c-primary-hover);
 }
 </style>
