@@ -70,7 +70,7 @@ function renderEditMode(canvas) {
     ctx.scale(scaleXFlip, scaleYFlip)
 
     ctx.rotate(layer.rotation)
-    ctx.scale(layer.scaleX, layer.scaleY) // ALTERADO
+    ctx.scale(layer.scaleX, layer.scaleY)
     ctx.globalAlpha = layer.opacity
 
     ctx.drawImage(
@@ -134,7 +134,7 @@ function renderPreviewMode(canvas) {
       .scale(finalScale)
       .translate(layer.x, layer.y)
       .rotate((layer.rotation * 180) / Math.PI)
-      .scale(layer.scaleX, layer.scaleY) // ALTERADO
+      .scale(layer.scaleX, layer.scaleY)
       .translate(-patternW / 2, -patternH / 2)
 
     pattern.setTransform(matrix)
@@ -238,12 +238,14 @@ function handleMouseDown(e) {
   const mouse = { x: e.offsetX, y: e.offsetY }
   if (store.activeTool === 'rect-select') {
     isDrawingSelection = true
-    store.startSelection(mouse)
+    store.startSelection(mouse) // Seleção retangular ainda usa coordenadas de tela
     return
   }
   if (store.activeTool === 'lasso-select') {
     isDrawingSelection = true
-    store.startLasso(mouse)
+    // **CORREÇÃO AQUI**
+    const workspaceCoords = screenToWorkspaceCoords(mouse)
+    store.startLasso(workspaceCoords)
     return
   }
   const clickedLayer = getLayerAtPosition(mouse)
@@ -269,7 +271,11 @@ function handleMouseMove(e) {
   const mouse = { x: e.offsetX, y: e.offsetY }
   if (isDrawingSelection) {
     if (store.activeTool === 'rect-select') store.updateSelection(mouse)
-    if (store.activeTool === 'lasso-select') store.updateLasso(mouse)
+    if (store.activeTool === 'lasso-select') {
+      // **CORREÇÃO AQUI**
+      const workspaceCoords = screenToWorkspaceCoords(mouse)
+      store.updateLasso(workspaceCoords)
+    }
     return
   }
 
