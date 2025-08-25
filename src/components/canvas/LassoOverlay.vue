@@ -14,15 +14,17 @@ const renderLasso = () => {
 
   if (store.workspace.lasso.points.length < 2) return
 
+  // Pega o pan e zoom para converter as coordenadas do workspace para a tela
+  const { pan, zoom } = store.workspace
+
   ctx.beginPath()
   const firstPoint = store.workspace.lasso.points[0]
-  ctx.moveTo(firstPoint.x, firstPoint.y)
+  ctx.moveTo(firstPoint.x * zoom + pan.x, firstPoint.y * zoom + pan.y)
   for (let i = 1; i < store.workspace.lasso.points.length; i++) {
     const point = store.workspace.lasso.points[i]
-    ctx.lineTo(point.x, point.y)
+    ctx.lineTo(point.x * zoom + pan.x, point.y * zoom + pan.y)
   }
 
-  // Se o laço estiver finalizado (mas ainda visível), fecha o caminho
   if (!store.workspace.lasso.active) {
     ctx.closePath()
   }
@@ -67,8 +69,9 @@ onUnmounted(() => {
   }
 })
 
+// Observa as mudanças nos pontos do laço E no pan/zoom do workspace
 watch(
-  () => store.workspace.lasso.points,
+  () => [store.workspace.lasso.points, store.workspace.pan, store.workspace.zoom],
   () => {
     scheduleRender()
   },
@@ -79,10 +82,8 @@ watch(
   () => store.workspace.lasso.active,
   (isActive) => {
     if (!isActive && store.workspace.lasso.points.length > 0) {
-      // Renderiza uma última vez com o caminho fechado
       scheduleRender()
     } else if (!isActive) {
-      // Limpa o canvas se o laço for cancelado
       if (ctx) {
         const canvas = lassoCanvasRef.value
         ctx.clearRect(0, 0, canvas.width, canvas.height)
