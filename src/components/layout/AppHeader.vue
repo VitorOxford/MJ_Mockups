@@ -33,7 +33,7 @@ async function logout() {
         style="cursor: pointer"
       />
       <span class="divider"></span>
-      <div class="document-title">MockupCreator Pro</div>
+      <div class="document-title">Editor de Mockups MJ/div>
     </div>
 
     <div class="header-group center">
