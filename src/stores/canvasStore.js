@@ -41,7 +41,6 @@ export const useCanvasStore = defineStore('canvas', () => {
       dimCmW: 0,
       dimCmH: 0,
     },
-    // Objeto de estado para transformações da Bounding Box
     transformStart: {
       layerId: null,
       type: null,
@@ -185,6 +184,53 @@ export const useCanvasStore = defineStore('canvas', () => {
       }
     }
     return null
+  }
+
+  // --- NOVA FUNÇÃO DE ALTA QUALIDADE ---
+  async function generateAppliedPatternBlob() {
+    const mainMockup = mockupLayer.value
+    const patternLayer = layers.value.find((l) => l.type === 'pattern' && l.visible && l.image)
+
+    if (!mainMockup || !patternLayer || !patternLayer.fullResImage) {
+      console.log('Mockup ou estampa não encontrados para gerar a imagem aplicada.')
+      return null
+    }
+
+    // 1. Usa as dimensões originais do mockup multiplicadas pela sua escala para a mais alta qualidade
+    const finalMockupWidth = mainMockup.metadata.originalWidth * mainMockup.scale
+    const finalMockupHeight = mainMockup.metadata.originalHeight * mainMockup.scale
+
+    const offscreenCanvas = document.createElement('canvas')
+    offscreenCanvas.width = finalMockupWidth
+    offscreenCanvas.height = finalMockupHeight
+    const ctx = offscreenCanvas.getContext('2d')
+
+    if (!ctx) return null
+
+    // 2. Usa a imagem de resolução total da estampa para o pattern
+    const imageToRender = patternLayer.fullResImage
+    const pattern = ctx.createPattern(imageToRender, 'repeat')
+    if (!pattern) return null
+
+    const patternW = imageToRender.width
+    const patternH = imageToRender.height
+
+    // 3. Constrói a matriz de transformação, mas SEM a escala de visualização (previewRenderScale)
+    // As transformações são relativas ao canto superior esquerdo do mockup
+    const matrix = new DOMMatrix()
+      .translate(patternLayer.x, patternLayer.y) // Posição central da estampa
+      .rotate((patternLayer.rotation * 180) / Math.PI) // Gira
+      .scale(patternLayer.scale) // Escala
+      .translate(-patternW / 2, -patternH / 2) // Compensa a origem para o centro
+
+    pattern.setTransform(matrix)
+
+    // 4. Preenche o canvas com a estampa transformada
+    ctx.fillStyle = pattern
+    ctx.fillRect(0, 0, finalMockupWidth, finalMockupHeight)
+
+    // 5. Retorna a imagem como um Blob PNG
+    return new Promise((resolve) => offscreenCanvas.toBlob(resolve, 'image/png'))
   }
 
   function calculateAndUpdateDimensions(widthInScreenPx, heightInScreenPx) {
@@ -346,10 +392,6 @@ export const useCanvasStore = defineStore('canvas', () => {
   function selectLayer(id) {
     selectedLayerId.value = id
   }
-
-  // ================================================================= //
-  // LÓGICA DE TRANSFORMAÇÃO DA BOUNDING BOX CORRIGIDA                 //
-  // ================================================================= //
 
   function startLayerTransform(config) {
     workspace.isTransforming = true
@@ -616,5 +658,6 @@ export const useCanvasStore = defineStore('canvas', () => {
     duplicateLayer,
     duplicateSelection,
     cutoutSelection,
+    generateAppliedPatternBlob, // Exporta a nova função
   }
 })
