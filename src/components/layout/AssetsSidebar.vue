@@ -52,20 +52,23 @@ onMounted(fetchAssets)
       <div class="assets-header">
         <h3>Adicionar Mockup</h3>
       </div>
+
       <div class="assets-content">
         <div v-if="loading" class="loader">A carregar Mockups...</div>
         <div v-else-if="mockupList.length === 0" class="empty-state">
           Nenhum mockup encontrado.
         </div>
+
         <div v-else class="thumbnails-grid">
           <div
             v-for="asset in mockupList"
             :key="asset.id"
             class="thumbnail"
-            :style="{ backgroundImage: `url(${getThumbUrl(asset.name)})` }"
             @click="handleAssetClick(asset)"
             :title="asset.name"
-          ></div>
+          >
+            <img :src="getThumbUrl(asset.name)" :alt="asset.name" />
+          </div>
         </div>
       </div>
     </aside>
@@ -80,7 +83,6 @@ onMounted(fetchAssets)
   width: 100vw;
   height: 100vh;
   background-color: rgba(0, 0, 0, 0.2);
-  /* Aumentado para um valor bem alto para garantir que fique na frente */
   z-index: 1100;
   display: flex;
   justify-content: flex-end;
@@ -120,18 +122,34 @@ onMounted(fetchAssets)
   grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
   gap: 12px;
 }
+
+/* ALTERAÇÕES DE ESTILO ABAIXO */
 .thumbnail {
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-md);
   background-color: var(--c-background);
-  background-size: cover;
-  background-position: center;
   cursor: pointer;
   border: 2px solid transparent;
   transition: all 0.2s ease;
+  /* Adicionado para conter a imagem */
+  overflow: hidden;
+  position: relative;
 }
+
+.thumbnail img {
+  width: 100%;
+  height: 100%;
+  /* Garante que a imagem cubra o espaço, como o 'background-size: cover' */
+  object-fit: cover;
+  object-position: center;
+  transition: transform 0.2s ease;
+}
+
 .thumbnail:hover {
-  transform: scale(1.05);
   border-color: var(--c-primary-hover);
+}
+
+.thumbnail:hover img {
+  transform: scale(1.05);
 }
 </style>
