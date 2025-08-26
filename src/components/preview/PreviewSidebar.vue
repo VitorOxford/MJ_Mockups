@@ -27,14 +27,14 @@ const patternDimensionsCm = computed(() => {
 })
 
 async function generatePreviewImageBlob() {
-  const artboard = document.querySelector('.artboard') // O alvo para a captura
+  const artboard = document.querySelector('.artboard')
   if (!artboard) return null
 
   const canvas = await html2canvas(artboard, {
     allowTaint: true,
     useCORS: true,
     backgroundColor: '#f0f2f5',
-    scale: 3, // Aumenta a resolução para HD
+    scale: 3, 
   })
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.95))
 }
@@ -66,6 +66,14 @@ Data: ${new Date().toLocaleDateString('pt-BR')}
     if (imageBlob) {
       zip.file('Preview_Final.jpg', imageBlob)
     }
+    
+    // --- MODIFICAÇÃO PRINCIPAL ---
+    // Gera e adiciona a imagem da estampa aplicada em alta resolução
+    const appliedPatternBlob = await store.generateAppliedPatternBlob()
+    if (appliedPatternBlob) {
+      zip.file('Estampa_Aplicada_no_Mockup.png', appliedPatternBlob)
+    }
+    // --- FIM DA MODIFICAÇÃO ---
 
     const zipBlob = await zip.generateAsync({ type: 'blob' })
     const link = document.createElement('a')
