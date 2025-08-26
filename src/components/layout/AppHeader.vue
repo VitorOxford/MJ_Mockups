@@ -11,15 +11,6 @@ const router = useRouter()
 const viewModeText = computed(() => {
   return canvasStore.workspace.viewMode === 'edit' ? 'Ver Mockup' : 'Voltar a Editar'
 })
-
-function navigateToAccount() {
-  router.push('/account')
-}
-
-async function logout() {
-  await authStore.handleLogout()
-  router.push('/auth')
-}
 </script>
 
 <template>
@@ -33,7 +24,7 @@ async function logout() {
         style="cursor: pointer"
       />
       <span class="divider"></span>
-      <div class="document-title">Editor de Mockups MJ</div>
+      <div class="document-title">MockupCreator Pro</div>
     </div>
 
     <div class="header-group center">
@@ -63,50 +54,6 @@ async function logout() {
       <button @click="canvasStore.toggleViewMode()" class="btn btn-secondary">
         {{ viewModeText }}
       </button>
-
-      <div class="user-actions">
-        <button class="icon-btn" title="Minha Conta" @click="navigateToAccount">
-          <img
-            v-if="authStore.profile && authStore.profile.avatar_url"
-            :src="authStore.profile.avatar_url"
-            alt="Avatar"
-            class="header-avatar"
-          />
-          <svg
-            v-else
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-            <circle cx="12" cy="7" r="4"></circle>
-          </svg>
-        </button>
-
-        <button @click="logout" class="icon-btn" title="Sair">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-            <polyline points="16 17 21 12 16 7"></polyline>
-            <line x1="21" y1="12" x2="9" y2="12"></line>
-          </svg>
-        </button>
-      </div>
     </div>
   </header>
 </template>
