@@ -94,7 +94,16 @@ Gestor do Pedido: (Nome do Vendedor)
     if (mockupBlob) zip.file(`Mockup_${mockup.name}`, mockupBlob)
 
     const patternBlob = await store.getLayerBlob(pattern)
-    if (patternBlob) zip.file(`Estampa_${pattern.name}`, patternBlob)
+    if (patternBlob) zip.file(`Estampa_Original_${pattern.name}`, patternBlob)
+    
+    // --- MODIFICAÇÃO PRINCIPAL ---
+    // Gera e adiciona a imagem da estampa aplicada em alta resolução
+    const appliedPatternBlob = await store.generateAppliedPatternBlob()
+    if (appliedPatternBlob) {
+      zip.file('Estampa_Aplicada_no_Mockup.png', appliedPatternBlob)
+    }
+    // --- FIM DA MODIFICAÇÃO ---
+
 
     const zipBlob = await zip.generateAsync({ type: 'blob' })
     const link = document.createElement('a')
